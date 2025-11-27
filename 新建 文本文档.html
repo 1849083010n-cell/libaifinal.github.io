@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Li Bai - Poet & Wanderer</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@300;400;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        @keyframes gradient-x { 0%, 100% { background-position: left center; } 50% { background-position: right center; } }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slowZoom { 0% { transform: scale(1); } 100% { transform: scale(1.1); } }
+
+        .animate-gradient-x { animation: gradient-x 3s ease infinite; background-size: 200% 200%; }
+        .animate-blink { animation: blink 1s step-end infinite; }
+        .animate-fade-up { animation: fadeInUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        .hover-zoom-img:hover { animation: slowZoom 3s ease-out forwards; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+        
+        body { font-family: 'Inter', sans-serif; min-width: 1024px; }
+        .font-serif { font-family: 'Noto Serif SC', serif; }
+        .font-calligraphy { font-family: 'Ma Shan Zheng', cursive; }
+        .leaflet-container { z-index: 0; }
+        .writing-vertical { writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 0.2em; }
+        
+        .bg-paper-texture {
+            background-color: #fdfbf7;
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.08'/%3E%3C/svg%3E");
+        }
+        .ink-shadow { box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15); }
+    </style>
+</head>
+<body class="bg-stone-50 text-gray-900 antialiased">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        const { useState, useEffect, useRef, useLayoutEffect, useCallback, useMemo } = React;
+
+        const DEEPSEEK_API_KEY = (function() {
+            const encrypted = "c2stNzI5OTc5NDQ0NjZhNGFmMmJjZDUyYTA2ODg5NWY4Y2Y=";
+            try { return atob(encrypted); } catch (e) { return ""; }
+        })();
+
+        // --- 0. 翻译资源 (Keys Simplified & Unified) ---
+        const TRANSLATIONS = {
+            zh: {
+                nav_life: "诗仙生平", nav_emotion: "情感图谱", nav_footprint: "足迹漫游", nav_drink: "与仙对饮", nav_about: "关于我们",
+                home_title: "李白辉煌的一生", 
+                home_phrases: ["游历四方", "诗集创作", "情感表达"],
+                home_subtitle: "我是李白，一位流浪于天地间的诗仙。<br/>帮助世人感受盛唐气象，<br/>用诗歌连接古今，以酒入道，探寻自由与浪漫的真谛。",
+                search_g: "诗仙解疑", search_t: "一问三李", search_ph_g: "问问李白...", search_ph_t: "输入关键词...",
+                
+                fp_title: "足迹漫游", fp_desc: "拖动下方滑块跟随李白行走天涯", fp_exit: "退出",
+                fp_l_701: "701 (出生)", fp_l_724: "724 (出蜀)", fp_l_742: "742 (入京)", fp_l_755: "755 (战乱)", fp_l_762: "762 (去世)",
+                fp_year_pre: "", fp_year_suf: "年",
+
+                em_title: "情感图谱", em_subtitle: "探索不同时期与地点的诗歌情感浓度",
+                em_stage_label: "人生阶段", em_core_label: "核心情感",
+                em_st_all: "全部", em_st_youth: "青年期", em_st_middle: "中年期", em_st_old: "老年期",
+                em_tp_joy: "喜悦与欢乐", em_tp_sadness: "哀怨与悲伤", em_tp_ambition: "豪放与激昂", em_tp_loneliness: "孤寂与落寞", em_tp_nostalgia: "思乡与怀古", em_tp_friendship: "友情与知己",
+                
+                map_heat: "地理热力图", map_stats: "意象与AI赏析",
+                st_pie_title: "李白最爱用的词 (Top 8)", st_bar_title: "意象情感分布", st_ai_title: "AI 智能赏析",
+                st_dd_y: "1. 年份", st_dd_l: "2. 地点", st_dd_m: "3. 情感", st_dd_t: "4. 诗作",
+                btn_analyze: "✨ 生成深度赏析", btn_analyzing: "分析中...",
+
+                dk_title: "与仙对饮", dk_menu_title: "客官今日心情如何？", dk_back: "返回",
+                dk_m_1: "豪情万丈", dk_m_2: "思念故乡", dk_m_3: "怀才不遇", dk_m_4: "享受自然", dk_m_5: "感叹时光",
+
+                about_title: "关于我们", about_team: "成员组成", about_research: "研究问题", about_download: "数据下载", about_back: "返回主页",
+                btn_download: "下载数据集 (CSV)", role_label: "负责岗位", email_label: "联系邮箱",
+                research_text: "本项目旨在通过地理信息系统（GIS）与自然语言处理（NLP）技术，重构唐代诗人李白的时空轨迹与情感图谱。我们探讨了地理环境如何重塑诗人的创作心境，以及由于政治沉浮导致的“情感-地理”强关联性。",
+                
+                life_title: "诗仙生平", life_back: "返回主页",
+                link_email: "邮箱", link_linkedin: "领英 ↗"
+            },
+            en: {
+                nav_life: "Biography", nav_emotion: "Emotion Map", nav_footprint: "Footprints", nav_drink: "Drink", nav_about: "About Us",
+                home_title: "The Glorious Life of Li Bai", 
+                home_phrases: ["Wandering the World", "Creating Poetry", "Expressing Emotions"],
+                home_subtitle: "I am Li Bai, a poet wandering between heaven and earth.<br/>Connecting past and present through poetry, seeking truth through wine and freedom.",
+                search_g: "Q&A", search_t: "Three Ages", search_ph_g: "Ask Li Bai...", search_ph_t: "Keywords...",
+
+                fp_title: "Footprints", fp_exit: "Exit",
+                fp_l_701: "701 (Born)", fp_l_724: "724 (Depart)", fp_l_742: "742 (Capital)", fp_l_755: "755 (War)", fp_l_762: "762 (Passed)",
+                fp_year_pre: "Year ", fp_year_suf: "",
+
+                em_title: "Emotion Map", em_subtitle: "Explore emotional density across time and location",
+                em_stage_label: "Life Stage", em_core_label: "Core Emotion",
+                em_st_all: "All", em_st_youth: "Youth", em_st_middle: "Middle", em_st_old: "Old",
+                em_tp_joy: "Joy", em_tp_sadness: "Sadness", em_tp_ambition: "Ambition", em_tp_loneliness: "Loneliness", em_tp_nostalgia: "Nostalgia", em_tp_friendship: "Friendship",
+
+                map_heat: "Heatmap", map_stats: "Analytics",
+                st_pie_title: "Top 8 Imagery", st_bar_title: "Imagery Emotion Distribution", st_ai_title: "AI Analysis",
+                st_dd_y: "1. Year", st_dd_l: "2. Location", st_dd_m: "3. Emotion", st_dd_t: "4. Poem",
+                btn_analyze: "✨ Generate Analysis", btn_analyzing: "Thinking...",
+
+                dk_title: "Drink with Li Bai", dk_menu_title: "How are you feeling today?", dk_back: "Back",
+                dk_m_1: "Ambitious", dk_m_2: "Nostalgic", dk_m_3: "Frustrated", dk_m_4: "Nature", dk_m_5: "Time Passing",
+
+                about_title: "About Us", about_team: "Our Team", about_research: "Research Questions", about_download: "Data Download", about_back: "Back to Home",
+                btn_download: "Download Dataset (CSV)", role_label: "Role", email_label: "Email",
+                research_text: "This project aims to reconstruct the spatial-temporal trajectory and emotional landscape of the Tang Dynasty poet Li Bai using GIS and NLP technologies. We explore how geographical environments reshaped the poet's state of mind and the strong correlation between 'emotion and geography' driven by his political ups and downs.",
+                
+                life_title: "Biography", life_back: "Back to Home",
+                link_email: "Email", link_linkedin: "LinkedIn ↗"
+            }
+        };
+
+        // --- 1. 成员数据 ---
+        const TEAM_MEMBERS = [
+            { name_en: "Li Jiaye", name_zh: "李佳烨", role_en: "CEO", role_zh: "首席执行官", img: "https://api.dicebear.com/7.x/avataaars/svg?seed=LiJiaye" },
+            { name_en: "Li Zirui", name_zh: "李子睿", role_en: "SVP & General Counsel", role_zh: "高级副总裁兼总法律顾问", img: "https://api.dicebear.com/7.x/avataaars/svg?seed=LiZirui" },
+            { name_en: "Chen Jingjing", name_zh: "陈婧婧", role_en: "SVP Services", role_zh: "高级副总裁 (服务)", img: "https://api.dicebear.com/7.x/avataaars/svg?seed=ChenJingjing" },
+            { name_en: "Lin Yang", name_zh: "林杨", role_en: "SVP Software Engineering", role_zh: "高级副总裁 (软件工程)", img: "https://api.dicebear.com/7.x/avataaars/svg?seed=LinYang" },
+            { name_en: "Li Yanlin", name_zh: "黎彦伶", role_en: "SVP Machine Learning", role_zh: "高级副总裁 (机器学习)", img: "https://api.dicebear.com/7.x/avataaars/svg?seed=LiYanlin" },
+            { name_en: "Nie Erzhuo", name_zh: "聂尔卓", role_en: "SVP Worldwide Marketing", role_zh: "高级副总裁 (全球营销)", img: "https://api.dicebear.com/7.x/avataaars/svg?seed=NieErzhuo" },
+            { name_en: "Bai Jiashu", name_zh: "白家树", role_en: "Chief Operating Officer", role_zh: "首席运营官", img: "https://api.dicebear.com/7.x/avataaars/svg?seed=BaiJiashu" },
+            { name_en: "Li Bai", name_zh: "李白", role_en: "Poet & Wanderer", role_zh: "诗人 & 游子", img: "https://picx.zhimg.com/80/v2-7228406e00cce3ede863a49268a98993_720w.webp?source=2c26e567" }
+        ];
+
+        // --- 2. 核心资源 (SVG - 锁定版) ---
+        const FOOTPRINT_SVG = `
+            <div style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.3));">
+                <svg viewBox="0 0 1024 1024" width="50" height="50" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M949.1 501.1c0 35.4-4.2 69.8-12.1 102.8-5.7 23.9-13.6 47.2-23.1 69.4-0.5 1.2-0.9 2.3-1.5 3.3-4.3 9.8-9 19.4-14 28.9-45.2 85.4-117.9 154-206.2 194.1-1.3 0.6-2.6 1.2-4 1.8-53.6 23.6-113 36.8-175.2 36.8-118.9 0-226.7-47.7-305.4-125.2-6.5-6.4-12.7-12.9-18.8-19.6-0.7-0.8-1.5-1.6-2.1-2.4-41.9-47.5-73.7-104-92-166.5-11.4-39.1-17.6-80.5-17.6-123.4 0-27.5 2.5-54.4 7.4-80.4 12.2-65.7 39-126.2 77-178 28.5-39 63.4-73 103-100.6 56.8-39.6 123.6-66.1 195.9-74.8 4.8-0.6 9.6-1 14.4-1.5 12.6-1.2 25.5-1.7 38.5-1.7 80.8 0 156.6 22.1 221.4 60.4 50.7 30 94.8 70.1 129.6 117.3 22.4 30.4 40.9 63.8 54.9 99.5 2 5 3.9 10.2 5.7 15.4 15.7 45.2 24.2 93.8 24.2 144.4z" fill="#FFFFFF" opacity=".4"></path>
+                    <path d="M893.8 495.6c0 31-3.6 61-10.6 89.8-5 20.9-11.8 41.2-20.1 60.6-0.5 1-0.8 2-1.3 2.9-3.7 8.6-7.8 17-12.2 25.2-39.4 74.6-102.9 134.5-180 169.5-1.1 0.5-2.3 1-3.5 1.6-46.8 20.6-98.6 32.1-153 32.1-103.8 0-197.9-41.6-266.6-109.3-5.6-5.6-11.1-11.2-16.4-17.1-0.6-0.7-1.3-1.4-1.8-2.1-36.6-41.5-64.4-90.9-80.3-145.4-10.1-34.2-15.5-70.4-15.5-107.8 0-24 2.2-47.5 6.5-70.2 10.7-57.3 34.1-110.2 67.2-155.4 24.9-34.1 55.4-63.7 89.9-87.8 49.6-34.6 107.9-57.7 171-65.3 4.2-0.5 8.4-0.9 12.6-1.3 11-1 22.2-1.5 33.6-1.5 70.6 0 136.7 19.3 193.3 52.8 44.3 26.2 82.8 61.2 113.1 102.5 19.6 26.6 35.7 55.7 47.9 86.9 1.7 4.4 3.4 8.9 5 13.4 13.7 39.2 21.2 81.7 21.2 125.9z" fill="#FFFFFF"></path>
+                    <path d="M282.7 368.668c-3.9-1.5-8.6-0.1-11 3.5l-2.3 5.4-15.9 37.4-11 25.9-19.1 44.8 16.5 7 6.6-15.3 15.1-35.5c-2.7-0.9-4.9-2.9-6.2-5.4-1-2.1-1.4-4.4-0.7-6.9 1.1-4.8 5.5-8.1 10.2-8.1 0.8 0 1.6 0.1 2.4 0.3l2.6 0.6 6.6-15.4 9.7-22.8 2.2-5.2c0.9-4.2-1.5-8.6-5.7-10.3z" fill="#1F0D60"></path>
+                    <path d="M240 492.768c-4.1 4.5-8.1 9-12.2 13.4-3.1 3.4-6.3 6.9-9.4 10.3 0.7-4.5 1.5-9 2.2-13.4 0.9-5.8 1.9-11.5 2.8-17.3 2.6-0.9 5-1.8 7.6-2.6 0.2 1.5 0.4 3.1 0.5 4.6 1.9-2.7 3.7-5.4 5.7-8.2 1 4.4 1.9 8.8 2.8 13.2z" fill="#D5E0EA"></path>
+                    <path d="M288.3 379.068l-2.2 5.1-16.6-6.6 2.3-5.4c2.4-3.6 7-5.1 11-3.5 4.1 1.6 6.5 6 5.5 10.4z" fill="#F714FF"></path>
+                    <path d="M286.1 385.368c-0.1 0-0.2 0-0.4-0.1l-16.6-6.7c-0.5-0.2-0.7-0.7-0.5-1.2 0.2-0.5 0.7-0.7 1.2-0.6l16.6 6.7c0.5 0.2 0.7 0.7 0.5 1.2-0.2 0.5-0.4 0.7-0.8 0.7zM284.6 389.068c-0.1 0-0.2 0-0.4-0.1l-16.6-6.7c-0.5-0.2-0.7-0.7-0.5-1.2 0.2-0.5 0.7-0.7 1.2-0.6l16.6 6.7c0.5 0.2 0.7 0.7 0.5 1.2 0 0.5-0.4 0.7-0.8 0.7z" fill="#D5E0EA"></path>
+                    <path d="M227.8 506.268c-3.1 3.4-6.3 6.8-9.4 10.2 0.7-4.5 1.5-8.9 2.2-13.3l7.2 3.1z" fill="#1F0D60"></path>
+                    <path d="M645.031 463.1c2-10.2 4-20.5 5.9-30.7-6.9 1.7-16.1 2.8-24-1.7-22.7-12.9-7.3-56.5-25.6-73.4-11.7-10.9-38.7-12.2-101.1 18.9-6.1 18.6-7.7 36.1-8.5 45.5-0.9 10.6-7.1 82.7 32.9 105.2 7.3 4.1 15.4 6.2 23.6 6.5-0.3 6.4-0.8 21-1.6 36.5-0.8 19.8-1.7 41-2.1 48.6 32.1-20.9 64.1-41.7 96.1-62.5 0-0.3 0-0.6 0.1-0.9 0.5-8.1 0.9-16 1.4-24.1 0.7-12.2 1.4-24.3 2.1-36.5 0.4-6.3 0.7-12.5 1.1-18.8 0-1.9-0.1-3.7-0.3-5.5v-0.5c0.1-0.6 0.2-1.2 0.3-1.7-0.1-1.8-0.2-3.4-0.3-4.9z" fill="#FFD2DC"></path>
+                    <path d="M729.236 280.4c0.5-33.3-26.3-60.7-59.8-61.1-33.5-0.5-61.1 26.1-61.6 59.4-0.1 9.3 1.8 18.1 5.5 25.9-16.4-3.9-33.9-4.8-50.2-1.9-9.2 1.6-32.9 6.3-49.3 25.4-4.1 4.8-12.8 15.1-14.6 30.8-0.8 7.2 0 13.2 0.9 17.2 0.1 0 0.2-0.1 0.3-0.2 62.5-31.1 89.4-29.8 101.1-18.9 18.3 17 2.9 60.6 25.6 73.5 7.9 4.5 17.2 3.4 24 1.7-2 10.3-6.5 55.8-6.8 62-0.7 12.2-1.4 24.3-2.1 36.5 8.8-6.1 19.4-15 29-27.5 23.6-30.5 26.3-62.4 27.1-73.6 3.1-43.3-14.6-75.4-21.9-87.1-0.6-1-1.4-2-2.2-3 30.4-2.6 54.5-27.9 55-59.1zM548.231 533.9c-0.5 0-0.8-0.3-0.9-0.7-0.1-0.5 0.3-1 0.7-1 5.8-1 11.8-2.3 17.5-3.8 7.8-2.1 15.7-4.8 23.1-7.8 0.5-0.2 1 0 1.2 0.5s0 1-0.5 1.2c-7.6 3.2-15.4 5.9-23.3 7.9-5.7 1.5-11.8 2.8-17.7 3.8h-0.1v-0.1z"></path>
+                    <path d="M672.63 423.17c-3-0.6-5.9-0.9-8.9-0.7-5.2 0.3-10.1 1.7-14.5 4.2-0.8 0.5-1.6 0.9-2.3 1.5-0.6 0.5-1.3 0.9-1.9 1.4-6.2 4.6-10.8 11.5-12.5 19.6-3.9 18.1 7.8 36 26 39.9 18.3 3.9 36.2-7.7 40.2-25.9 3.8-18.2-7.8-36.1-26.1-40z" fill="#FFD2DC"></path>
+                    <path d="M651.33 468.47c-0.4 0-0.6-0.2-0.8-0.5-0.2-0.5-0.1-1 0.4-1.2 3-1.5 5-4.6 5.2-8 0.2-3.4-1.6-6.8-4.6-8.6-0.3-0.2-0.5-0.5-0.5-0.8 0-0.4 0.2-0.6 0.5-0.8l30.9-17.5c0.5-0.3 1-0.1 1.3 0.4 0.3 0.5 0.1 1-0.4 1.3l-29.6 16.9c2.8 2.3 4.5 5.8 4.2 9.4-0.2 4-2.7 7.7-6.2 9.5-0.1-0.2-0.2-0.1-0.4-0.1z"></path>
+                    <path d="M651.231 475.2l-28.6 16.8 33.2 16.7z" fill="#00B7EA"></path>
+                    <path d="M855.969 661.719c-3.7 8.6-7.9 17.2-12.4 25.6-18.3 34.2-41.7 65.3-69.6 92.5s-59.8 50-94.5 67.5c-0.9 0.5-1.3 1.5-0.8 2.4-4.7 2.4-9.3 4.5-14.1 6.7-1.1 0.5-2.3 1-3.5 1.5-47 20.5-99 31.9-153.5 31.9-63.2 0-122.8-15.2-175.3-42.2 0.5-0.9 0.1-2-0.7-2.4-33.1-17.2-63.4-39.1-90.1-65.2-5.7-5.4-11.2-11.2-16.6-17.2-0.1-0.2-0.3-0.3-0.4-0.5 34.1-92.2 68.2-184.3 102.2-276.5 22.1 7.2 44.3 14.3 66.4 21.6-0.7 23.5-1.7 47.1-2.8 71.2-2 41.3-4.6 81.9-7.6 121.6 4.1-6.3 64.1-94.7 164.3-130.6-0.8 19.8-1.7 41-2.1 48.6 32.1-20.9 64-41.7 96.1-62.5 0-0.3 0-0.6 0.1-0.9 106.6 3.8 183.5 75.2 214.9 106.9z" fill="#4A90E2"></path>
+                    <path d="M544.669 618.819c-0.2 0-0.3 0-0.5-0.1-0.3-0.2-0.5-0.5-0.5-0.8l1.4-31.2c0-0.5 0.5-0.9 0.9-0.9 0.5 0 0.9 0.5 0.9 0.9l-1.3 29.5 86-55.8c0.5-0.3 1-0.2 1.3 0.3 0.3 0.5 0.2 1-0.3 1.3l-87.4 56.8c-0.1-0.1-0.3 0-0.5 0z" fill="#D5E0EA"></path>
+                    <path d="M609.768 709.857v223.5c0 4.1-3.1 7.5-7.2 8-51.6 5.5-103.3 11.2-155 16.7-1.6 0.2-3.1-0.1-4.5-0.8-37.5-18.5-74.9-37.1-112.4-55.6-3-1.5-4.8-4.6-4.5-7.9 1.3-14.2 2.6-28.5 3.8-42.7 5-55.9 10.1-111.8 15.2-167.7 0.5-6.2 7.7-9.4 12.7-5.9 0.1 0 0.1 0.1 0.2 0.1 24.9 17.4 81.2 58.2 95.5 68.6 2.1 1.5 4.8 1.9 7.3 1.2l132.7-43.3 5.4-1.7c5.4-1.8 10.8 2.1 10.8 7.5z" fill="#1F0D60"></path>
+                    <path d="M423.768 948.857c-0.5-0.1-0.9-0.5-0.9-1l21.9-207.4c0.1-0.5 0.5-0.8 1-0.8 0.5 0.1 0.8 0.5 0.8 1l-21.9 207.4c-0.1 0.4-0.5 0.8-0.9 0.8zM487.268 954.857c-0.5 0-0.9-0.4-0.9-0.9l-7.5-212.6c0-0.5 0.4-0.9 0.9-0.9 0.5-0.1 0.9 0.4 0.9 0.9l7.5 212.6c0 0.4-0.4 0.9-0.9 0.9z" fill="#D5E0EA"></path>
+                    <path d="M593.768 704.157l-136.6 44.6s-70.3-50.9-98.9-71l19.6-7.9 79.6 63.5 115.8-44.8 20.5 15.6z" fill="#D5E0EA"></path>
+                </svg>
+            </div>
+        `;
+
+        const LOCATION_COORDS = {
+            "碎叶城": { lat: 42.8447, lon: 75.1648 }, "峨眉山": { lat: 29.5807, lon: 103.3592 },
+            "江油": { lat: 31.7828, lon: 104.7570 }, "成都": { lat: 30.5728, lon: 104.0668 },
+            "扬州": { lat: 32.3934, lon: 119.4290 }, "安陆": { lat: 31.3653, lon: 113.7077 },
+            "长安": { lat: 34.2652, lon: 108.9500 }, "洛阳": { lat: 34.6197, lon: 112.4540 },
+            "宣城": { lat: 30.9407, lon: 118.7587 }, "金陵": { lat: 32.0415, lon: 118.7781 },
+            "白帝城": { lat: 31.0450, lon: 109.5780 }, "当涂": { lat: 31.5453, lon: 118.4870 },
+            "庐山": { lat: 29.5910, lon: 115.9922 }, "夜郎": { lat: 27.6888, lon: 106.3773 },
+            "天姥山": { lat: 29.5000, lon: 120.8900 }
+        };
+
+        const JOURNEY_DATA = [
+            { y: 701, n: '碎叶城', lat: 42.8447, lng: 75.1648 }, { y: 705, n: '江油 (蜀中)', lat: 31.7828, lng: 104.7570 },
+            { y: 718, n: '戴天山', lat: 31.81, lng: 104.70 }, { y: 720, n: '成都', lat: 30.5728, lng: 104.0668 },
+            { y: 724, n: '峨眉山', lat: 29.5807, lng: 103.3592 }, { y: 725, n: '渝州', lat: 29.5627, lng: 106.5528 },
+            { y: 725, n: '荆门', lat: 30.5667, lng: 111.4500 }, { y: 726, n: '江夏', lat: 30.5484, lng: 114.3168 },
+            { y: 726, n: '金陵', lat: 32.0415, lng: 118.7781 }, { y: 726, n: '扬州', lat: 32.3934, lng: 119.4290 },
+            { y: 727, n: '安陆', lat: 31.3653, lng: 113.7077 }, { y: 730, n: '长安', lat: 34.2652, lng: 108.9500 },
+            { y: 731, n: '洛阳', lat: 34.6197, lng: 112.4540 }, { y: 732, n: '并州', lat: 37.8706, lng: 112.5489 },
+            { y: 735, n: '洛阳', lat: 34.6197, lng: 112.4540 }, { y: 742, n: '长安 (翰林)', lat: 34.2652, lng: 108.9500 },
+            { y: 744, n: '洛阳 (遇杜甫)', lat: 34.6197, lng: 112.4540 }, { y: 745, n: '兖州', lat: 35.5531, lng: 116.8261 },
+            { y: 746, n: '越中', lat: 30.0024, lng: 120.5753 }, { y: 750, n: '幽州', lat: 39.9042, lng: 116.4074 },
+            { y: 752, n: '宣城', lat: 30.9407, lng: 118.7587 }, { y: 753, n: '秋浦', lat: 30.6500, lng: 117.4800 },
+            { y: 755, n: '金陵', lat: 32.0415, lng: 118.7781 }, { y: 756, n: '庐山', lat: 29.5910, lng: 115.9922 },
+            { y: 757, n: '浔阳', lat: 29.7133, lng: 115.9853 }, { y: 758, n: '江夏', lat: 30.5484, lng: 114.3168 },
+            { y: 759, n: '白帝城 (遇赦)', lat: 31.0450, lng: 109.5780 }, { y: 759, n: '江陵', lat: 30.3322, lng: 112.2353 },
+            { y: 760, n: '豫章', lat: 28.6820, lng: 115.8579 }, { y: 761, n: '金陵', lat: 32.0415, lng: 118.7781 },
+            { y: 762, n: '当涂 (终老)', lat: 31.5453, lng: 118.4870 }
+        ];
+
+        // --- 业务组件 ---
+        const BaseMap = ({onL, className}) => {
+            const r = useRef();
+            useEffect(() => {
+                if (!r.current && window.L) {
+                    const m = window.L.map('b-m', { center: [33.0, 110.0], zoom: 5, zoomControl: false, attributionControl: false });
+                    window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(m);
+                    r.current = m;
+                    if (onL) onL(m);
+                }
+                return () => { if (r.current) { r.current.remove(); r.current = null; } };
+            }, []);
+            return <div id="b-m" className={`w-full h-full ${className}`} style={{zIndex: 0}}></div>;
+        };
+
+        const Typewriter = ({ lang }) => {
+            const phrases = TRANSLATIONS[lang].home_phrases;
+            const [index, setIndex] = useState(0);
+            const [subIndex, setSubIndex] = useState(0);
+            const [reverse, setReverse] = useState(false);
+            useEffect(() => { setIndex(0); setSubIndex(0); }, [lang]);
+            useEffect(() => {
+                if (index >= phrases.length) { setIndex(0); return; }
+                const currentPhrase = phrases[index];
+                let timeoutValue = 150;
+                if (reverse) timeoutValue = 50;
+                if (!reverse && subIndex === currentPhrase.length) timeoutValue = 2000;
+                if (reverse && subIndex === 0) timeoutValue = 500;
+                const timer = setTimeout(() => {
+                    if (!reverse && subIndex === currentPhrase.length) { setReverse(true); return; }
+                    if (reverse && subIndex === 0) { setReverse(false); setIndex((prev) => (prev + 1) % phrases.length); return; }
+                    setSubIndex((prev) => prev + (reverse ? -1 : 1));
+                }, timeoutValue);
+                return () => clearTimeout(timer);
+            }, [subIndex, index, reverse, phrases]);
+            return (
+                <div className="flex flex-col">
+                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-tight text-gray-900 mb-2">{TRANSLATIONS[lang].home_title}</h1>
+                    <div className="text-5xl md:text-7xl font-bold tracking-tight leading-tight min-h-[1.2em]">
+                        <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 text-transparent bg-clip-text animate-gradient-x">{phrases[index].substring(0, subIndex)}</span>
+                        <span className="ml-1 inline-block w-1 h-12 md:h-16 bg-gray-800 animate-blink align-middle mb-2"></span>
+                    </div>
+                </div>
+            );
+        };
+
+        const Portrait = () => (
+            <div className="relative w-full aspect-square max-w-[400px] mx-auto">
+                <div className="absolute inset-0 bg-gray-100 rounded-full transform translate-x-4 translate-y-4 -z-10"></div>
+                <div className="w-full h-full rounded-full overflow-hidden shadow-2xl border-4 border-white relative bg-gray-200 flex items-center justify-center group">
+                    <img src="https://picx.zhimg.com/80/v2-7228406e00cce3ede863a49268a98993_720w.webp?source=2c26e567" className="w-full h-full object-cover hover:scale-110 transition-transform duration-1000 ease-in-out" />
+                    <div className="absolute inset-0 bg-blue-900/10 group-hover:bg-transparent transition-colors duration-500"></div>
+                </div>
+            </div>
+        );
+
+        const SearchSection = ({ onSearch, loading, lang }) => {
+            const [query, setQuery] = useState('');
+            const [mode, setMode] = useState('general'); 
+            const [menuOpen, setMenuOpen] = useState(false);
+            const dropdownRef = useRef(null);
+            const t = (key) => TRANSLATIONS[lang][key] || key;
+
+            useEffect(() => {
+                const handleClickOutside = (event) => { if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setMenuOpen(false); };
+                document.addEventListener("mousedown", handleClickOutside);
+                return () => document.removeEventListener("mousedown", handleClickOutside);
+            }, []);
+            const handleSubmit = (e) => { e.preventDefault(); if(query.trim()) onSearch(query, mode); };
+            return (
+                <div className="w-full max-w-2xl mx-auto px-4 relative z-50">
+                    <form onSubmit={handleSubmit} className="relative group">
+                        <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl blur opacity-25 group-hover:opacity-75 transition duration-1000"></div>
+                        <div className="relative flex items-center bg-white rounded-3xl leading-none shadow-sm h-16">
+                            <div className="relative h-full flex items-center border-r border-gray-100" ref={dropdownRef}>
+                                <button type="button" onClick={() => setMenuOpen(!menuOpen)} className="flex items-center gap-2 px-5 h-full text-sm font-bold text-gray-700 hover:text-blue-600 transition-colors whitespace-nowrap bg-gray-50 hover:bg-gray-100 rounded-l-3xl min-w-[120px] justify-between">
+                                    {mode === 'general' ? t('search_btn_default') : t('search_btn_three')}
+                                    <span className="text-xs opacity-50">▼</span>
+                                </button>
+                                {menuOpen && (
+                                    <div className="absolute top-full left-0 mt-2 w-full bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50 overflow-hidden animate-fade-up">
+                                        <button type="button" onClick={()=>{setMode('general');setMenuOpen(false)}} className="w-full text-left px-4 py-3 text-sm hover:bg-blue-50">{t('search_btn_default')}</button>
+                                        <button type="button" onClick={()=>{setMode('three_ages');setMenuOpen(false)}} className="w-full text-left px-4 py-3 text-sm hover:bg-purple-50">{t('search_btn_three')}</button>
+                                    </div>
+                                )}
+                            </div>
+                            <input type="text" value={query} onChange={e=>setQuery(e.target.value)} placeholder={mode === 'general' ? t('search_ph_default') : t('search_ph_three')} className="flex-1 h-full py-2 px-4 text-gray-900 bg-transparent border-0 ring-0 outline-none focus:ring-0 text-lg font-serif placeholder-gray-400" />
+                            <button type="submit" disabled={loading} className="px-6 h-full text-blue-600 hover:text-blue-800 transition-colors rounded-r-3xl hover:bg-blue-50 flex items-center justify-center">
+                                {loading ? <span className="animate-spin">⌛</span> : <span className="text-xl">➤</span>}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            );
+        };
+
+        const AboutPage = ({ onBack, lang }) => {
+            const t = (key) => TRANSLATIONS[lang][key] || key;
+            return (
+                <div className="fixed inset-0 z-50 bg-white flex flex-col">
+                     <div className="absolute top-0 left-0 right-0 z-[1000] bg-white/90 backdrop-blur border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm">
+                        <h2 className="text-xl font-bold text-gray-900">{t('about_title')}</h2>
+                        <button onClick={onBack} className="px-4 py-1.5 rounded-full border border-gray-300 text-sm hover:bg-gray-100 transition-colors">✕ {t('about_back')}</button>
+                    </div>
+                    <div className="flex-1 pt-24 pb-20 px-6 overflow-y-auto custom-scrollbar bg-stone-50">
+                        <div className="max-w-5xl mx-auto space-y-16">
+                            <section>
+                                <h3 className="text-3xl font-bold text-gray-900 mb-12 text-center">{t('about_team')}</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-12">
+                                    {TEAM_MEMBERS.map((member, i) => (
+                                        <div key={i} className="flex flex-col text-left group">
+                                            <div className="w-full aspect-square bg-gray-100 rounded-2xl mb-4 overflow-hidden relative">
+                                                <img src={member.img} alt={member.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                                            </div>
+                                            <h4 className="text-lg font-bold text-gray-900 leading-tight">{lang === 'zh' ? member.name_zh : member.name_en}</h4>
+                                            <p className="text-xs text-gray-500 mt-1 leading-relaxed font-medium">{lang === 'zh' ? member.role_zh : member.role_en}</p>
+                                            <div className="mt-3 flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                                <span className="text-xs text-blue-600 cursor-pointer hover:underline">{t('link_email')}</span>
+                                                <span className="text-xs text-blue-600 cursor-pointer hover:underline">{t('link_linkedin')}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                            <section className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100">
+                                <h3 className="text-2xl font-bold text-gray-900 mb-6">{t('about_research')}</h3>
+                                <p className="text-gray-600 leading-loose text-justify text-lg font-light">{t('research_text')}</p>
+                            </section>
+                            <section className="text-center py-10">
+                                <h3 className="text-2xl font-bold text-gray-900 mb-8">{t('about_download')}</h3>
+                                <button className="inline-flex items-center gap-3 px-8 py-4 bg-gray-900 text-white rounded-full hover:bg-black transition-all hover:scale-105 shadow-xl">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                    <span className="font-medium text-lg">{t('btn_download')}</span>
+                                </button>
+                                <p className="text-xs text-gray-400 mt-4">Last updated: Nov 2023 | Size: 2.4MB | License: MIT</p>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const EmotionMapPage = ({ viewType, onBack, lang }) => {
+            const [activeEmotion, setActiveEmotion] = useState('joy');
+            const [activePeriod, setActivePeriod] = useState('all');
+            const mapInstanceRef = useRef(null);
+            const heatLayerRef = useRef(null);
+            const t = (key) => TRANSLATIONS[lang][key] || key;
+            const [sY, setSY] = useState(''); const [sL, setSL] = useState(''); const [sM, setSM] = useState(''); const [sT, setST] = useState('');
+            const [aiRes, setAiRes] = useState(null); const [aiLoading, setAiLoading] = useState(false);
+            
+            const listYears = useMemo(() => [...new Set(POEM_DATABASE.map(i=>i.y))].sort(), []);
+            const listLocs = useMemo(() => sY ? [...new Set(POEM_DATABASE.filter(i=>i.y==sY).map(i=>i.l))] : [], [sY]);
+            const listMoods = useMemo(() => sL ? [...new Set(POEM_DATABASE.filter(i=>i.y==sY && i.l==sL).map(i=>i.m))] : [], [sY, sL]);
+            const listTitles = useMemo(() => sM ? [...new Set(POEM_DATABASE.filter(i=>i.y==sY && i.l==sL && i.m==sM).map(i=>i.t))] : [], [sY, sL, sM]);
+
+            const handleAnalyze = async () => {
+                setAiLoading(true);
+                const res = await callDeepSeekAPI('analysis', { y:sY, l:sL, m:sM, t:sT });
+                setAiRes(res);
+                setAiLoading(false);
+            };
+
+            useEffect(() => {
+                if (viewType !== 'map') return;
+                const timer = setTimeout(() => {
+                    if (!mapInstanceRef.current && window.L && document.getElementById('em-map')) {
+                        const m = window.L.map('em-map', { center: [33.0, 110.0], zoom: 5, zoomControl: false, attributionControl: false });
+                        window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(m);
+                        mapInstanceRef.current = m;
+                    }
+                    if (mapInstanceRef.current) {
+                        const m = mapInstanceRef.current;
+                        if (heatLayerRef.current) heatLayerRef.current.remove();
+                        const category = EMOTION_MAP_DATA[activeEmotion];
+                        const pts = category.points.filter(p => activePeriod === 'all' || p.period === activePeriod).map(p => [p.lat, p.lng, p.intensity]);
+                        let gradient = { 0.3: 'blue', 0.5: 'lime', 0.7: 'yellow', 1.0: 'red' };
+                        if (category.color === 'orange') gradient = {0.2:'#fbbf24', 0.6:'#f59e0b', 1:'#b45309'};
+                        if (category.color === 'red') gradient = {0.2:'#f87171', 0.6:'#dc2626', 1:'#991b1b'};
+                        if (category.color === 'grey') gradient = {0.2:'#9ca3af', 0.6:'#4b5563', 1:'#111827'};
+                        if (category.color === 'purple') gradient = {0.2:'#a78bfa', 0.6:'#7c3aed', 1:'#4c1d95'};
+                        if (category.color === 'green') gradient = {0.2:'#34d399', 0.6:'#059669', 1:'#064e3b'};
+                        if (window.L.heatLayer) heatLayerRef.current = window.L.heatLayer(pts, { radius: 50, blur: 30, max: 2.0, minOpacity: 0.65, gradient }).addTo(m);
+                    }
+                }, 50);
+                return () => { clearTimeout(timer); };
+            }, [activeEmotion, activePeriod, viewType]);
+
+            const pieData = useMemo(() => ({
+                labels: ANALYTICS_DATA_FULL.map(i => i[lang === 'en' ? 'name_en' : 'name_zh']),
+                datasets: [{ data: ANALYTICS_DATA_FULL.map(i => i.value), backgroundColor: ANALYTICS_DATA_FULL.map(i => i.color), borderWidth: 0 }]
+            }), [lang]);
+
+            const pieOptions = useMemo(() => ({
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    datalabels: { color: '#fff', font: { weight: 'bold', size: 12 }, formatter: (value, ctx) => ctx.chart.data.labels[ctx.dataIndex], textShadowColor: 'rgba(0,0,0,0.3)', textShadowBlur: 2 }
+                }
+            }), []);
+
+            return (
+                <div className="fixed inset-0 z-50 bg-white flex flex-col">
+                    <div className="absolute top-0 left-0 right-0 z-[1000] pointer-events-none flex flex-col md:flex-row justify-between p-4 md:p-6 gap-4">
+                        {viewType === 'map' ? (
+                            <div className="pointer-events-auto bg-white/95 backdrop-blur shadow-xl rounded-2xl p-5 border border-gray-200 max-w-md w-full flex flex-col gap-5">
+                                <div><h2 className="text-xl font-bold text-gray-900 font-serif">{t('em_title')}</h2><p className="text-xs text-gray-500 mt-1">{t('em_subtitle')}</p></div>
+                                <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">{t('em_stage_label')}</label><div className="flex bg-gray-100 rounded-lg p-1">{[{ id: 'all', label: 'em_st_all' }, { id: 'youth', label: 'em_st_youth' }, { id: 'middle', label: 'em_st_middle' }, { id: 'old', label: 'em_st_old' }].map(p => (<button key={p.id} onClick={() => setActivePeriod(p.id)} className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${activePeriod === p.id ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>{t(p.label)}</button>))}</div></div>
+                                <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">{t('em_core_label')}</label><div className="grid grid-cols-2 gap-2">{Object.keys(EMOTION_MAP_DATA).map((key) => (<button key={key} onClick={() => setActiveEmotion(key)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all border ${activeEmotion === key ? 'bg-gray-800 text-white border-gray-800 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}><span className="w-3 h-3 rounded-full shadow-sm border border-white/20" style={{ backgroundColor: EMOTION_MAP_DATA[key].color === 'grey' ? '#374151' : EMOTION_MAP_DATA[key].color }}></span>{t(`em_tp_${key}`)}</button>))}</div></div>
+                            </div>
+                        ) : <div></div>}
+                        <button onClick={onBack} className="pointer-events-auto h-10 px-4 rounded-full bg-white shadow-lg border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium">✕ {t('fp_exit')}</button>
+                    </div>
+                    <div id="em-map" className={`absolute inset-0 z-0 bg-stone-50 ${viewType === 'map' ? 'visible' : 'invisible'}`}></div>
+                    <div className={`absolute inset-0 z-10 bg-stone-50 overflow-y-auto custom-scrollbar pt-20 px-6 pb-20 ${viewType === 'stats' ? 'block' : 'hidden'}`}>
+                        <div className="max-w-6xl mx-auto space-y-12">
+                            <div className="text-center mb-8"><h2 className="text-3xl font-bold font-serif text-gray-800">{t('map_stats')}</h2></div>
+                            <div className="grid md:grid-cols-2 gap-12 items-stretch">
+                                <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 h-full flex flex-col items-center justify-between">
+                                    <h3 className="text-lg font-bold mb-6 text-gray-800 w-full text-left border-l-4 border-blue-800 pl-3">{t('st_pie_title')}</h3>
+                                    <div className="w-full h-72 relative flex justify-center"><ChartCanvas type="doughnut" data={pieData} options={pieOptions} /></div>
+                                    <div className="w-full mt-6 flex h-5 rounded-full overflow-hidden">{ANALYTICS_DATA_FULL.map((item, i) => { const percent = Math.round((item.value/TOTAL_VALUE)*100); const name = lang === 'en' ? item.name_en : item.name_zh; return (<div key={i} className="h-full flex items-center justify-center text-[10px] text-white/90 font-bold" style={{width: `${percent}%`, background: item.color}} title={`${name} ${percent}%`}>{percent > 5 ? `${percent}%` : ''}</div>); })}</div>
+                                </div>
+                                <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 h-full flex flex-col">
+                                    <h3 className="text-lg font-bold mb-6 text-gray-800 border-l-4 border-blue-800 pl-3">{t('st_bar_title')}</h3>
+                                    <div className="space-y-5 flex-1">{ANALYTICS_DATA_FULL.map((item, idx) => { const name = lang === 'en' ? item.name_en : item.name_zh; const emotion = lang === 'en' ? item.emotion_en : item.emotion_zh; return (<div key={idx} className="group"><div className="flex justify-between text-sm mb-2 font-bold text-gray-700"><span>{name}</span><span>{emotion}</span></div><div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden relative" title={`${item.value}次 (${Math.round((item.value/TOTAL_VALUE)*100)}%)`}><div className="h-full rounded-full transition-all duration-700 hover:opacity-80 cursor-help" style={{width: `${(item.value/120)*100}%`, backgroundColor: item.color}}></div></div></div>)})}</div>
+                                </div>
+                            </div>
+                            <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden p-8">
+                                <div className="flex items-center gap-2 mb-6 border-b pb-4"><span className="text-2xl">🧠</span><h3 className="font-bold text-gray-800">{t('st_ai_title')}</h3></div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                                    <select className="p-3 rounded-xl border" value={sY} onChange={e=>setSY(e.target.value)}><option value="">{t('st_opt_year')}</option>{listYears.map(y=><option key={y} value={y}>{y}</option>)}</select>
+                                    <select className="p-3 rounded-xl border" value={sL} onChange={e=>setSL(e.target.value)} disabled={!sY}><option value="">{t('st_opt_loc')}</option>{listLocs.map(l=><option key={l} value={l}>{l}</option>)}</select>
+                                    <select className="p-3 rounded-xl border" value={sM} onChange={e=>setSM(e.target.value)} disabled={!sL}><option value="">{t('st_opt_mood')}</option>{listMoods.map(m=><option key={m} value={m}>{m}</option>)}</select>
+                                    <select className="p-3 rounded-xl border" value={sT} onChange={e=>setST(e.target.value)} disabled={!sM}><option value="">{t('st_opt_poem')}</option>{listTitles.map(t=><option key={t} value={t}>{t}</option>)}</select>
+                                </div>
+                                <button onClick={handleAnalyze} disabled={!sT || aiLoading} className="w-full py-4 bg-gradient-to-r from-blue-800 to-blue-600 text-white font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50">{aiLoading ? t('btn_analyzing') : t('btn_analyze')}</button>
+                                {aiRes && <div className="mt-8 p-8 bg-[#fdfbf7] rounded-xl border border-stone-200 whitespace-pre-wrap leading-loose font-serif">{aiRes}</div>}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // 4. 与仙对饮
+        const DrinkPage = ({ onBack, lang }) => {
+            const [mood, setMood] = useState("豪情万丈");
+            const [zoom, setZoom] = useState(false);
+            const data = DRINK_DATA[mood];
+            const t = (key) => TRANSLATIONS[lang][key] || key;
+            const moodKeys = ["豪情万丈", "思念故乡", "怀才不遇", "享受自然", "感叹时光"];
+            const moodTransKeys = ["dk_m_1", "dk_m_2", "dk_m_3", "dk_m_4", "dk_m_5"];
+
+            return (
+                <div className="min-h-screen bg-paper-texture font-serif animate-fade-in flex flex-col">
+                    {zoom && <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center cursor-zoom-out p-6" onClick={()=>setZoom(false)}><img src={data.img} className="max-w-full max-h-full rounded shadow-2xl animate-slowZoom"/></div>}
+                    <div className="fixed top-0 w-full bg-white/80 backdrop-blur z-20 px-6 py-4 flex justify-between border-b border-gray-200"><h2 className="text-xl font-bold">{t('dk_title')}</h2><button onClick={onBack} className="px-4 border rounded-full hover:bg-gray-50">{t('dk_back')}</button></div>
+                    <div className="flex-1 pt-24 pb-12 px-6 flex flex-col md:flex-row gap-8 max-w-6xl mx-auto w-full">
+                        <div className="w-full md:w-1/3 space-y-3">
+                            <h3 className="font-bold text-gray-500 mb-4">{t('dk_menu_title')}</h3>
+                            {moodKeys.map((k, i) => (<button key={k} onClick={()=>setMood(k)} className={`w-full p-4 rounded-xl border text-left flex justify-between transition-all ${mood===k?'bg-gray-900 text-white shadow-lg scale-105':'bg-white hover:bg-gray-50'}`}><span className="font-bold">{t(moodTransKeys[i])}</span>{mood===k&&'🍶'}</button>))}
+                        </div>
+                        <div className="w-full md:w-2/3 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden flex flex-col">
+                            <div className="h-80 md:h-96 overflow-hidden cursor-zoom-in relative group" onClick={()=>setZoom(true)}>
+                                <img src={data.img} className="w-full h-full object-cover transition-transform duration-[3s] group-hover:scale-110"/>
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-8"><h2 className="text-white text-4xl font-bold tracking-widest">{t(moodTransKeys[moodKeys.indexOf(mood)])}</h2></div>
+                            </div>
+                            <div className="flex-1 p-10 flex flex-col items-center justify-center text-center bg-[#fffdfa]">
+                                <h3 className="text-3xl font-calligraphy mb-4 leading-relaxed">{data.poem}</h3>
+                                <p className="text-sm text-gray-400 uppercase tracking-widest mt-4 border-t pt-4">—— {data.desc}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // 5. 结果页
+        const ResultPage = ({ type, data, onBack, lang }) => {
+            const t = (key) => TRANSLATIONS[lang][key] || key;
+            return (
+                <div className="min-h-screen bg-paper-texture flex items-center justify-center p-4 font-serif">
+                    <div className="bg-white p-10 rounded-2xl shadow-xl max-w-3xl w-full relative border border-gray-100 animate-fade-up">
+                        <button onClick={onBack} className="absolute top-6 right-6 text-gray-400 hover:text-black">✕</button>
+                        <div className="flex gap-4 mb-6 border-b pb-4"><div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden"><img src="https://picx.zhimg.com/80/v2-7228406e00cce3ede863a49268a98993_720w.webp?source=2c26e567" className="w-full h-full object-cover"/></div><div><h2 className="text-xl font-bold">{t('search_btn_default')}</h2><p className="text-xs text-gray-500">AI Assistant</p></div></div>
+                        <div className="prose max-w-none leading-loose whitespace-pre-wrap text-gray-700">{data}</div>
+                    </div>
+                </div>
+            );
+        };
+
+        // 6. 其他页面
+        const LifePage = ({onBack, lang}) => {
+            const events = [
+                { y: '701', t_zh: '碎叶降生', t_en: 'Born in Suiye', d_zh: '出生于碎叶城。', d_en: 'Born in Suiye.' },
+                { y: '724', t_zh: '仗剑去国', t_en: 'Leaving Home', d_zh: '辞亲远游，出三峡。', d_en: 'Left home to wander.' },
+                { y: '742', t_zh: '翰林供奉', t_en: 'Hanlin Academy', d_zh: '入京供奉翰林。', d_en: 'Served in Hanlin Academy.' },
+                { y: '744', t_zh: '赐金放还', t_en: 'Leaving Court', d_zh: '离开长安，遇杜甫。', d_en: 'Left court, met Du Fu.' },
+                { y: '755', t_zh: '避乱江南', t_en: 'Rebellion', d_zh: '安史之乱爆发。', d_en: 'An Lushan Rebellion.' },
+                { y: '762', t_zh: '揽月长眠', t_en: 'Death', d_zh: '病逝于当涂。', d_en: 'Passed away in Dangtu.' }
+            ];
+            const t = (key) => TRANSLATIONS[lang][key] || key;
+            return (
+                <div className="min-h-screen bg-stone-50 text-gray-800 font-serif animate-fade-in">
+                    <div className="fixed top-0 left-0 w-full bg-stone-50/90 backdrop-blur-md border-b border-stone-200 z-20 px-6 py-4 flex justify-between items-center"><h2 className="text-2xl font-bold text-gray-900 tracking-widest">{t('life_title')}</h2><button onClick={onBack} className="px-4 py-2 rounded-full bg-white border border-gray-300 text-sm hover:bg-gray-100 transition-colors">✕ {t('about_back')}</button></div>
+                    <div className="max-w-4xl mx-auto pt-24 pb-20 px-6"><div className="relative border-l-2 border-stone-300 ml-6 md:ml-12 space-y-16">{events.map((e,i)=>(<div key={i} className="relative pl-8 md:pl-16 group"><div className="absolute -left-[9px] top-0 w-5 h-5 rounded-full bg-stone-100 border-4 border-gray-400 group-hover:border-blue-600 group-hover:scale-125 transition-all duration-300"></div><div className="absolute -left-16 md:-left-24 top-0 text-right w-12 md:w-20"><span className="text-lg md:text-xl font-bold text-gray-400 group-hover:text-blue-600 transition-colors font-sans">{e.y}</span></div><div className="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-stone-200 hover:shadow-lg transition-shadow duration-300"><h3 className="text-2xl font-bold mb-3 text-gray-900">{lang==='en'?e.t_en:e.t_zh}</h3><p className="text-lg text-gray-600 leading-relaxed">{lang==='en'?e.d_en:e.d_zh}</p></div></div>))}</div></div>
+                </div>
+            );
+        };
+        
+        const FootprintPage = ({onBack, lang}) => {
+            const [m,sM]=useState(null);const [p,sP]=useState(701);const lRef=useRef({});
+            const t = (key) => TRANSLATIONS[lang][key] || key;
+            
+            useEffect(()=>{if(m&&window.L){const L=window.L;
+                if(lRef.current.group) lRef.current.group.clearLayers();
+                const group = L.featureGroup().addTo(m); lRef.current.group = group;
+                
+                const curPoints = JOURNEY_DATA.filter(d => d.y <= p);
+                if (curPoints.length === 0) return;
+
+                L.polyline(curPoints.map(c=>[c.lat,c.lng]),{color:'#2563eb',weight:3,dashArray:'10,10'}).addTo(group);
+                curPoints.forEach(pt => { L.circleMarker([pt.lat, pt.lng], {radius:5, color:'#ffffff', weight:1, fillColor:'#1e40af', fillOpacity:1}).addTo(group); });
+
+                const cur = curPoints[curPoints.length-1];
+                L.marker([cur.lat,cur.lng], {
+                    icon: L.divIcon({
+                        html: FOOTPRINT_SVG, 
+                        className: 'bg-transparent',
+                        iconSize: [50, 50],
+                        iconAnchor: [25, 25]
+                    })
+                })
+                 .addTo(group)
+                 .bindTooltip(`${t('fp_year_prefix')}${cur.y}${t('fp_year_suffix')} - ${cur.n}`, {permanent:true, direction:'top', offset:[0,-30], className:'font-bold text-blue-600 bg-white/90 border-0 shadow-sm px-2 py-1 rounded'})
+                 .openTooltip();
+            }},[m,p,lang]);
+            
+            return (
+                <div className="fixed inset-0 z-50 bg-white flex flex-col">
+                    <div className="absolute top-0 z-20 w-full p-4 flex justify-between pointer-events-none"><div className="bg-white/90 p-3 rounded-xl pointer-events-auto shadow-sm border border-gray-100"><h2 className="font-bold">{t('fp_title')}</h2></div><button onClick={onBack} className="bg-white px-4 py-2 rounded-full shadow pointer-events-auto border">✕ {t('fp_exit')}</button></div>
+                    <div className="flex-1 bg-blue-50/30"><BaseMap onL={sM} className="w-full h-full" /></div>
+                    <div className="bg-white p-8 border-t">
+                        <div className="max-w-4xl mx-auto">
+                            <div className="flex justify-between text-sm text-gray-500 mb-2 font-mono font-bold">
+                                <span>{t('fp_l_701')}</span><span>{t('fp_l_724')}</span><span>{t('fp_l_742')}</span><span>{t('fp_l_755')}</span><span>{t('fp_l_762')}</span>
+                            </div>
+                            <input type="range" min="701" max="762" value={p} onChange={e=>sP(+e.target.value)} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"/>
+                            <div className="text-center mt-2 text-blue-600 font-bold">{t('fp_year_prefix')}{p}{t('fp_year_suffix')}</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Router
+        const App = () => {
+            const [view, setView] = useState('home');
+            const [emotionSubView, setEmotionSubView] = useState('map'); 
+            const [searchRes, setSearchRes] = useState({type:'', data:''});
+            const [loading, setLoading] = useState(false);
+            const [emoMenuOpen, setEmoMenuOpen] = useState(false);
+            const [lang, setLang] = useState('zh'); 
+            const menuTimeoutRef = useRef(null);
+
+            const t = (key) => TRANSLATIONS[lang][key] || key;
+
+            const handleMenuEnter = () => { if (menuTimeoutRef.current) clearTimeout(menuTimeoutRef.current); setEmoMenuOpen(true); };
+            const handleMenuLeave = () => { menuTimeoutRef.current = setTimeout(() => setEmoMenuOpen(false), 200); };
+
+            const goSearch = async (q, type) => {
+                setLoading(true);
+                const res = await callDeepSeekAPI(type, {query:q});
+                setSearchRes({type, data:res});
+                setLoading(false);
+                setView('result');
+            };
+
+            const handleEmotionClick = (type) => {
+                setEmotionSubView(type);
+                setView('emotion');
+                setEmoMenuOpen(false);
+            };
+
+            const toggleLang = () => setLang(prev => prev === 'zh' ? 'en' : 'zh');
+
+            if(view==='emotion') return <EmotionMapPage viewType={emotionSubView} onBack={()=>setView('home')} lang={lang} />;
+            if(view==='drink') return <DrinkPage onBack={()=>setView('home')} lang={lang} />;
+            if(view==='life') return <LifePage onBack={()=>setView('home')} lang={lang} />;
+            if(view==='footprint') return <FootprintPage onBack={()=>setView('home')} lang={lang} />;
+            if(view==='result') return <ResultPage type={searchRes.type} data={searchRes.data} onBack={()=>setView('home')} lang={lang} />;
+            if(view==='about') return <AboutPage onBack={()=>setView('home')} lang={lang} />;
+
+            return (
+                <div className="min-h-screen bg-gray-50 text-gray-900 font-sans flex flex-col relative overflow-hidden">
+                    <header className="px-8 py-8 md:px-16 md:py-10 flex flex-col md:flex-row justify-between items-center max-w-7xl mx-auto w-full z-20">
+                        
+                        <div className="flex items-center gap-4 mb-4 md:mb-0">
+                            <div className="text-2xl font-bold tracking-widest cursor-pointer text-gray-900" onClick={()=>setView('home')}>LI BAI</div>
+                            <button onClick={toggleLang} className="px-2 py-1 text-xs font-bold border border-gray-300 rounded-md hover:bg-gray-100 transition-colors">
+                                {lang === 'zh' ? 'En' : '中'}
+                            </button>
+                        </div>
+
+                        <nav className="flex flex-wrap justify-center gap-3 md:gap-4">
+                            <button onClick={()=>setView('life')} className="group px-4 py-2 bg-white rounded-full shadow-sm hover:text-blue-600 transition-colors flex items-center gap-2"><span className="text-lg">📜</span> <span className="text-sm font-medium">{t('nav_life')}</span></button>
+                            
+                            <div className="relative group" onMouseEnter={handleMenuEnter} onMouseLeave={handleMenuLeave}>
+                                <button className="group px-4 py-2 bg-white rounded-full shadow-sm hover:text-red-600 transition-colors flex items-center gap-2">
+                                    <span className="text-lg">📊</span> 
+                                    <span className="text-sm font-medium">{t('nav_emotion')}</span>
+                                </button>
+                                {emoMenuOpen && (
+                                    <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50 overflow-hidden animate-fade-up">
+                                        <button onClick={()=>handleEmotionClick('map')} className="w-full text-left px-4 py-3 text-sm hover:bg-red-50 hover:text-red-600 font-medium">{t('map_heat')}</button>
+                                        <button onClick={()=>handleEmotionClick('stats')} className="w-full text-left px-4 py-3 text-sm hover:bg-red-50 hover:text-red-600 font-medium">{t('map_stats')}</button>
+                                    </div>
+                                )}
+                            </div>
+
+                            <button onClick={()=>setView('footprint')} className="group px-4 py-2 bg-white rounded-full shadow-sm hover:text-emerald-600 transition-colors flex items-center gap-2"><span className="text-lg">🌏</span> <span className="text-sm font-medium">{t('nav_footprint')}</span></button>
+                            <button onClick={()=>setView('drink')} className="group px-4 py-2 bg-white rounded-full shadow-sm hover:text-purple-600 transition-colors flex items-center gap-2"><span className="text-lg">🥂</span> <span className="text-sm font-medium">{t('nav_drink')}</span></button>
+                            <button onClick={()=>setView('about')} className="group px-4 py-2 bg-white text-gray-800 rounded-full shadow-sm hover:text-stone-600 transition-colors flex items-center gap-2 border border-gray-100"><span className="text-lg">ℹ️</span> <span className="text-sm font-medium">{t('nav_about')}</span></button>
+                        </nav>
+                    </header>
+                    <main className="flex-1 flex flex-col items-center justify-center px-8 pb-20">
+                        <div className="flex flex-col-reverse lg:flex-row items-center gap-12 lg:gap-20 max-w-6xl w-full">
+                            <div className="w-full lg:w-3/5 space-y-8 z-10"><Typewriter lang={lang} /><div className="max-w-lg"><p className="text-xl md:text-2xl text-gray-600 leading-relaxed font-serif" dangerouslySetInnerHTML={{__html: t('home_subtitle')}}></p></div></div>
+                            <div className="w-full lg:w-2/5 flex justify-center lg:justify-end"><Portrait /></div>
+                        </div>
+                        <div className="mt-16 w-full flex flex-col items-center"><SearchSection onSearch={goSearch} loading={loading} lang={lang} /></div>
+                    </main>
+                    <footer className="text-center py-6 text-gray-400 text-sm font-serif">&copy; 701-762 Tang Dynasty. Powered by DeepSeek AI.</footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

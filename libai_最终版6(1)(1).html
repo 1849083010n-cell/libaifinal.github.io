@@ -1,0 +1,2396 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Li Bai - Poet & Wanderer</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@300;400;700&display=swap" rel="stylesheet">
+
+    <!-- Leaflet Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+
+    <!-- React & Babel (Standard UMD for better local file support) -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Custom Styles -->
+    <style>
+        @keyframes gradient-x { 0%, 100% { background-position: left center; } 50% { background-position: right center; } }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slowZoom { 0% { transform: scale(1); } 100% { transform: scale(1.1); } }
+
+        .animate-gradient-x { animation: gradient-x 3s ease infinite; background-size: 200% 200%; }
+        .animate-blink { animation: blink 1s step-end infinite; }
+        .animate-fade-up { animation: fadeInUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        .hover-zoom-img:hover { animation: slowZoom 3s ease-out forwards; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+
+        body { font-family: 'Inter', sans-serif; }
+        .font-serif { font-family: 'Noto Serif SC', serif; }
+        .font-calligraphy { font-family: 'Ma Shan Zheng', cursive; }
+        .leaflet-container { z-index: 0; }
+        .writing-vertical { writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 0.2em; }
+
+        .bg-paper-texture {
+            background-color: #fdfbf7;
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.08'/%3E%3C/svg%3E");
+        }
+        .ink-shadow { box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15); }
+
+        #loading-screen {
+            position: fixed; inset: 0; background: #fff; z-index: 9999; display: flex; justify-content: center; align-items: center;
+            font-family: 'Noto Serif SC', serif; font-size: 1.5rem; color: #555;
+        }
+    </style>
+</head>
+<body class="bg-stone-50 text-gray-900 antialiased">
+    <div id="loading-screen">系统初始化中... (Initializing...)</div>
+    <div id="root"></div>
+
+    <!-- Polyfill for process (prevents crashes in some envs) -->
+    <script>window.process = { env: {} };</script>
+
+    <!-- Main Application Script -->
+    <script type="text/babel">
+        // Remove loading screen when React starts
+        setTimeout(() => {
+            const loader = document.getElementById('loading-screen');
+            if(loader) loader.style.display = 'none';
+        }, 800);
+
+        // Access React globals
+        const { useState, useEffect, useRef, useMemo } = React;
+        const { createRoot } = ReactDOM;
+
+        // --- CONSTANTS & DATA ---
+
+        const T = {
+            'app.title': { zh: 'LI BAI', en: 'LI BAI' },
+            'nav.life': { zh: '诗仙生平', en: 'Biography' },
+            'nav.emotion': { zh: '情感图谱', en: 'Emotion Map' },
+            'nav.network': { zh: '网络关系', en: 'Social Network' },
+            'nav.footprint': { zh: '足迹漫游', en: 'Footprints' },
+            'nav.drink': { zh: '与仙对饮', en: 'Drink w/ Li' },
+            'nav.about': { zh: '关于我们', en: 'About Us' },
+            'nav.lang': { zh: 'English', en: '中文' },
+
+            'home.hero.title': { zh: '李白辉煌的一生', en: 'The Glorious Life of Li Bai' },
+            'home.desc': { zh: '我是李白，一位流浪于天地间的诗仙。\n帮助世人感受盛唐气象，\n用诗歌连接古今，以酒入道，探寻自由与浪漫的真谛。', en: 'I am Li Bai, a poet wandering between heaven and earth.\nExperience the grandeur of the High Tang,\nConnect past and present through poetry, and seek the truth of freedom and romance through wine.' },
+            'footer.text': { zh: '© 701-762 唐朝. Powered by DeepSeek AI.', en: '© 701-762 Tang Dynasty. Powered by DeepSeek AI.' },
+
+            'search.placeholder': { zh: '问问李白...', en: 'Ask Li Bai...' },
+            'search.btn': { zh: '诗仙解疑', en: 'Ask Li Bai' },
+            'search.btn_alt': { zh: '一问三李', en: 'Three Ages' },
+
+            'life.title': { zh: '诗仙生平', en: 'Biography' },
+            'life.back': { zh: '返回主页', en: 'Back Home' },
+
+            'emotion.title': { zh: '情感图谱', en: 'Emotion Map' },
+            'emotion.subtitle': { zh: '探索不同时期与地点的诗歌情感浓度', en: 'Explore emotional intensity across time and place' },
+            'emotion.period': { zh: '人生阶段', en: 'Life Stage' },
+            'emotion.core': { zh: '核心情感', en: 'Core Emotion' },
+            'emotion.exit': { zh: '退出', en: 'Exit' },
+            'emotion.stats_title': { zh: '意象与智能赏析', en: 'Imagery & AI Analysis' },
+            'emotion.fav_words': { zh: '李白最爱用的词 (Top 8)', en: "Li Bai's Favorite Words (Top 8)" },
+            'emotion.dist': { zh: '意象情感分布', en: 'Imagery Emotion Distribution' },
+            'emotion.ai_title': { zh: 'AI 智能赏析', en: 'AI Analysis' },
+            'emotion.select_year': { zh: '1. 年份', en: '1. Year' },
+            'emotion.select_loc': { zh: '2. 地点', en: '2. Location' },
+            'emotion.select_mood': { zh: '3. 情感', en: '3. Emotion' },
+            'emotion.select_poem': { zh: '4. 诗作', en: '4. Poem' },
+            'emotion.btn_analyze': { zh: '✨ 生成深度赏析', en: '✨ Generate Analysis' },
+            'emotion.analyzing': { zh: '分析中...', en: 'Analyzing...' },
+
+            'drink.title': { zh: '与仙对饮', en: 'Drink with Li Bai' },
+            'drink.prompt': { zh: '客官今日心情如何？', en: 'How is your mood today?' },
+            'drink.back': { zh: '返回', en: 'Back' },
+
+            'footprint.title': { zh: '足迹漫游', en: 'Journey Map' },
+            'footprint.birth': { zh: '出生', en: 'Birth' },
+            'footprint.out': { zh: '出蜀', en: 'Depart' },
+            'footprint.capital': { zh: '入京', en: 'Capital' },
+            'footprint.war': { zh: '战乱', en: 'War' },
+            'footprint.death': { zh: '去世', en: 'Death' },
+
+            'about.title': { zh: '关于我们', en: 'About Us' },
+            'about.team': { zh: '成员组成', en: 'Executive Profiles' },
+            'about.research': { zh: '研究问题与办法', en: 'Research Questions And Methods' },
+            'about.findings': { zh: '研究结果', en: 'Research Findings' },
+            'about.sources': { zh: '数据来源', en: 'Data Sources' },
+            'about.data': { zh: '数据下载', en: 'Data Download' },
+            'about.download_btn': { zh: '下载数据集 (GitHub)', en: 'Download Dataset (GitHub)' },
+        };
+
+        const TYPEWRITER_PHRASES = {
+            zh: ["游历四方", "诗集创作", "情感表达"],
+            en: ["Wandering the World", "Creating Poetry", "Expressing Emotions"]
+        };
+
+        const JOURNEY_DATA = [
+            { y: 701, n: '碎叶城', lat: 42.8447, lng: 75.1648 }, { y: 705, n: '江油 (蜀中)', lat: 31.7828, lng: 104.7570 },
+            { y: 718, n: '戴天山', lat: 31.81, lng: 104.70 }, { y: 720, n: '成都', lat: 30.5728, lng: 104.0668 },
+            { y: 724, n: '峨眉山', lat: 29.5807, lng: 103.3592 }, { y: 725, n: '渝州', lat: 29.5627, lng: 106.5528 },
+            { y: 725, n: '荆门', lat: 30.5667, lng: 111.4500 }, { y: 726, n: '江夏', lat: 30.5484, lng: 114.3168 },
+            { y: 726, n: '金陵', lat: 32.0415, lng: 118.7781 }, { y: 726, n: '扬州', lat: 32.3934, lng: 119.4290 },
+            { y: 727, n: '安陆', lat: 31.3653, lng: 113.7077 }, { y: 730, n: '长安', lat: 34.2652, lng: 108.9500 },
+            { y: 731, n: '洛阳', lat: 34.6197, lng: 112.4540 }, { y: 732, n: '并州', lat: 37.8706, lng: 112.5489 },
+            { y: 735, n: '洛阳', lat: 34.6197, lng: 112.4540 }, { y: 742, n: '长安 (翰林)', lat: 34.2652, lng: 108.9500 },
+            { y: 744, n: '洛阳 (遇杜甫)', lat: 34.6197, lng: 112.4540 }, { y: 745, n: '兖州', lat: 35.5531, lng: 116.8261 },
+            { y: 746, n: '越中', lat: 30.0024, lng: 120.5753 }, { y: 750, n: '幽州', lat: 39.9042, lng: 116.4074 },
+            { y: 752, n: '宣城', lat: 30.9407, lng: 118.7587 }, { y: 753, n: '秋浦', lat: 30.6500, lng: 117.4800 },
+            { y: 755, n: '金陵', lat: 32.0415, lng: 118.7781 }, { y: 756, n: '庐山', lat: 29.5910, lng: 115.9922 },
+            { y: 757, n: '浔阳', lat: 29.7133, lng: 115.9853 }, { y: 758, n: '江夏', lat: 30.5484, lng: 114.3168 },
+            { y: 759, n: '白帝城 (遇赦)', lat: 31.0450, lng: 109.5780 }, { y: 759, n: '江陵', lat: 30.3322, lng: 112.2353 },
+            { y: 760, l: '豫章', lat: 28.6820, lng: 115.8579 }, { y: 761, n: '金陵', lat: 32.0415, lng: 118.7781 },
+            { y: 762, n: '当涂 (终老)', lat: 31.5453, lng: 118.4870 }
+        ];
+
+        const EMOTION_MAP_DATA = {
+            joy: { label: '喜悦与欢乐', enLabel: 'Joy & Happiness', color: 'orange', points: [{ lat: 31.78, lng: 104.73, intensity: 1.0, period: 'youth' }, { lat: 32.39, lng: 119.42, intensity: 1.0, period: 'middle' }, { lat: 31.04, lng: 109.58, intensity: 1.5, period: 'old' }, { lat: 30.95, lng: 118.75, intensity: 0.8, period: 'middle' }] },
+            sadness: { label: '哀怨与悲伤', enLabel: 'Sorrow & Sadness', color: 'blue', points: [{ lat: 31.55, lng: 118.48, intensity: 1.5, period: 'old' }, { lat: 28.15, lng: 107.05, intensity: 1.0, period: 'old' }, { lat: 34.25, lng: 108.98, intensity: 0.8, period: 'middle' }, { lat: 30.38, lng: 114.32, intensity: 1.0, period: 'old' }] },
+            ambition: { label: '豪放与激昂', enLabel: 'Ambition & Passion', color: 'red', points: [{ lat: 34.22, lng: 108.96, intensity: 1.5, period: 'middle' }, { lat: 30.67, lng: 104.07, intensity: 1.0, period: 'youth' }, { lat: 35.41, lng: 116.59, intensity: 0.8, period: 'middle' }, { lat: 34.62, lng: 112.45, intensity: 0.9, period: 'middle' }] },
+            loneliness: { label: '孤寂与落寞', enLabel: 'Loneliness', color: 'grey', points: [{ lat: 30.95, lng: 118.75, intensity: 1.5, period: 'middle' }, { lat: 31.43, lng: 113.75, intensity: 0.9, period: 'middle' }, { lat: 32.04, lng: 118.78, intensity: 1.0, period: 'old' }] },
+            nostalgia: { label: '思乡与怀古', enLabel: 'Nostalgia', color: 'purple', points: [{ lat: 32.04, lng: 118.78, intensity: 1.2, period: 'middle' }, { lat: 32.39, lng: 119.42, intensity: 0.9, period: 'middle' }, { lat: 30.33, lng: 112.20, intensity: 1.0, period: 'youth' }] },
+            friendship: { label: '友情与知己', enLabel: 'Friendship', color: 'green', points: [{ lat: 34.62, lng: 112.45, intensity: 1.5, period: 'middle' }, { lat: 32.39, lng: 119.42, intensity: 1.0, period: 'middle' }, { lat: 31.55, lng: 118.48, intensity: 0.8, period: 'old' }, { lat: 30.95, lng: 118.75, intensity: 0.9, period: 'middle' }] },
+        };
+
+const ANALYTICS_DATA_FULL = [
+            { name: '月', enName: 'Moon', value: 204, emotion: '思乡与怀古', enEmotion: 'Nostalgia', color: '#08306b' },
+            { name: '日', enName: 'Sun', value: 95, emotion: '友情与知己', enEmotion: 'Friendship', color: '#08519c' },
+            { name: '水', enName: 'Water', value: 83, emotion: '哀怨与悲伤', enEmotion: 'Sorrow', color: '#2171b5' },
+            { name: '云', enName: 'Cloud', value: 78, emotion: '友情与知己', enEmotion: 'Friendship', color: '#4292c6' },
+            { name: '客', enName: 'Guest', value: 65, emotion: '友情与知己', enEmotion: 'Friendship', color: '#6baed6' },
+            { name: '天', enName: 'Sky', value: 64, emotion: '豪放与激昂', enEmotion: 'Passion', color: '#9ecae1' },
+            { name: '酒', enName: 'Wine', value: 55, emotion: '哀怨与悲伤', enEmotion: 'Sorrow', color: '#c6dbef' },
+            { name: '山', enName: 'Mountain', value: 53, emotion: '友情与知己', enEmotion: 'Friendship', color: '#deebf7' }
+        ];
+
+        const TOTAL_VALUE = ANALYTICS_DATA_FULL.reduce((a,b)=>a+b.value,0);
+
+        const DRINK_DATA = {
+            "豪情万丈": { moodKey: 'ambitious', poem: "飞流直下三千尺，疑是银河落九天！", img: "https://raw.githubusercontent.com/seblee424/libai_emotin_data/main/飞流直下.jpg", desc: "《望庐山瀑布》" },
+            "思念故乡": { moodKey: 'homesick', poem: "举头望明月，低头思故乡。", img: "https://raw.githubusercontent.com/seblee424/libai_emotin_data/main/明月思想.jpg", desc: "《静夜思》" },
+            "怀才不遇": { moodKey: 'frustrated', poem: "天生我材必有用，千金散尽还复来。", img: "https://raw.githubusercontent.com/seblee424/libai_emotin_data/main/怀才不遇.jpg", desc: "《将进酒》" },
+            "享受自然": { moodKey: 'nature', poem: "两岸猿声啼不住，轻舟已过万重山。", img: "https://raw.githubusercontent.com/seblee424/libai_emotin_data/main/轻舟已过.jpg", desc: "《早发白帝城》" },
+            "感叹时光": { moodKey: 'time', poem: "弃我去者，昨日之日不可留；乱我心者，今日之日多烦忧。", img: "https://raw.githubusercontent.com/seblee424/libai_emotin_data/main/感叹时光.jpg", desc: "《宣州谢朓楼饯别校书叔云》" }
+        };
+
+        const MOOD_TRANSLATIONS = {
+            "豪情万丈": "Ambitious",
+            "思念故乡": "Homesick",
+            "怀才不遇": "Unappreciated",
+            "享受自然": "Enjoying Nature",
+            "感叹时光": "Lamenting Time"
+        };
+
+        const LIFE_EVENTS = [
+            {y:'701',t:{zh:'碎叶降生',en:'Birth in Suyab'},d:{zh:'出生于碎叶城。',en:'Born in Suyab (modern day Kyrgyzstan).'}},
+            {y:'724',t:{zh:'仗剑去国',en:'Leaving Home'},d:{zh:'辞亲远游，出三峡。',en:'Left home to travel, passing through the Three Gorges.'}},
+            {y:'742',t:{zh:'翰林供奉',en:'Imperial Academy'},d:{zh:'入京供奉翰林。',en:'Summoned to the capital as a Hanlin scholar.'}},
+            {y:'744',t:{zh:'赐金放还',en:'Leaving Capital'},d:{zh:'离开长安，遇杜甫。',en:'Left Chang\'an, met Du Fu.'}},
+            {y:'755',t:{zh:'避乱江南',en:'Fleeing War'},d:{zh:'安史之乱爆发。',en:'An Lushan Rebellion broke out.'}},
+            {y:'762',t:{zh:'揽月长眠',en:'Final Rest'},d:{zh:'病逝于当涂。',en:'Passed away in Dangtu.'}}
+        ];
+
+        const TEAM_MEMBERS = [
+            {
+                name: { zh: '李佳烨', en: 'Li Jiaye' },
+                title: { zh: '项目经理', en: 'Project Manager' },
+                avatar: 'https://github.com/Yang-lab1/CHC-final/blob/main/picture/li_jiaye.jpg?raw=true',
+                email: 'lijiayeee@126.com',
+                linkedin: 'linkedin.com/in/jiaye-li-248784381'
+            },
+            {
+                name: { zh: '李子睿', en: 'Li Zirui' },
+                title: { zh: 'AI工程师', en: 'AI Engineer' },
+                avatar: 'https://github.com/Yang-lab1/CHC-final/blob/main/picture/li_zirui.jpg?raw=true',
+                email: '25044237g@connect.polyu.hk',
+                linkedin: 'linkedin.com/in/zi-rui-li-853ba0382'
+            },
+            {
+                name: { zh: '陈婧婧', en: 'Chen Jingjing' },
+                title: { zh: '数据处理与人文专家', en: 'Data Processing & Humanities Expert' },
+                avatar: 'https://github.com/Yang-lab1/CHC-final/blob/main/picture/chen_jingjing.jpg?raw=true',
+                email: 'jocelynchen1225@gmail.com',
+                linkedin: 'linkedin.com/in/jingjing-chen-619925381'
+            },
+            {
+                name: { zh: '林杨', en: 'Lin Yang' },
+                title: { zh: '技术专家、软件工程师', en: 'Technical Experts, Software Engineers)' },
+                avatar:  'https://github.com/Yang-lab1/CHC-final/blob/main/picture/lin_yang.jpg?raw=true',
+                email: 'lin297861138@gmail.com',
+                linkedin: 'linkedin.com/in/yang-lin-3b1b09381'
+            },
+            {
+                name: { zh: '黎彦伶', en: 'Li Yanling' },
+                title: { zh: '数据收集和处理分析工程师', en: 'Data Collection & Processing Analysis Engineer' },
+                avatar: 'https://github.com/Yang-lab1/CHC-final/blob/main/picture/li_yanlin.jpg?raw=true',
+                email: 'lynn27149.li@gmail.com',
+                linkedin: 'linkedin.com/in/yanling-li-b05359331'
+            },
+            {
+                name: { zh: '聂尔卓', en: 'Nie Erzhuo' },
+                title: { zh: '全球营销', en: 'Global Marketing' },
+                avatar: 'https://github.com/Yang-lab1/CHC-final/blob/main/picture/nie_erzhuo.jpg?raw=true',
+                email: '1849083010n@gmail.com',
+                linkedin: 'linkedin.com/in/erzhuo-nie-ab7bb6381'
+            },
+            {
+                name: { zh: '白家澍', en: 'Bai Jiashu' },
+                title: { zh: '数据处理与人文专家', en: 'Data Processing & Humanities Expert' },
+                avatar: 'https://github.com/Yang-lab1/CHC-final/blob/main/picture/bai_jiashu.jpg?raw=true',
+                email: '25116581g@connect.polyu.hk',
+                linkedin: 'linkedin.com/in/kashupak'
+            },
+            {
+                name: { zh: '李白', en: 'Li Bai' },
+                title: { zh: '诗人 & 游子', en: 'Poet & Wanderer' },
+                avatar: 'https://picx.zhimg.com/80/v2-7228406e00cce3ede863a49268a98993_720w.webp?source=2c26e567',
+                email: 'libai@tang-dynasty.gov',
+                linkedin: 'linkedin.com/in/libai-poet'
+            },
+        ];
+
+// ❌ 找到你原来的这几行错代码（在 TEAM_MEMBERS 下面），删掉它们，换成下面的：
+
+        const RESEARCH_OVERVIEW = {
+            zh: "本项目旨在通过地理信息系统（GIS）与自然语言处理（NLP）技术，数字化重构唐代诗人李白一生的时空轨迹与情感图谱。通过对李白现存千余首诗作进行深度文本挖掘，我们提取了其中蕴含的情感关键词与地理名词，并利用历史地理数据库进行精确的空间定位。研究不仅可视化了诗人“仗剑去国”的壮游路线，更深入探讨了地理环境变化如何重塑诗人的创作心境，以及政治沉浮导致的情感-地理强关联性。我们试图回答：物理空间的移动如何映射到精神世界的波澜？盛唐的壮丽山河如何在诗歌意象中沉淀为永恒的文学地理符号？这一研究为理解中国古典文学提供了全新的定量化与可视化视角。",
+            en: "This project aims to digitally reconstruct the spatiotemporal trajectory and emotional landscape of Li Bai, the most prominent poet of the Tang Dynasty, by integrating advanced Geographic Information Systems (GIS) with Natural Language Processing (NLP) techniques. We conducted a comprehensive text mining analysis on over one thousand of his surviving poems to extract emotional keywords and specific geographical references, mapping them against historical geographic databases. Our research not only visualizes the poet's extensive travel routes across 8th-century China but also investigates how shifting geographical environments influenced his creative sentiment. Furthermore, we analyze the strong correlation between his emotional states and spatial location, particularly in the context of his political fluctuations—from imperial favor in the capital to exile in the remote southwest. By answering how physical movement maps onto spiritual experience, this study offers a novel quantitative perspective for interpreting the interplay between geography and literature in Chinese classical poetry."
+        };
+
+        const RESEARCH_FINDINGS = {
+            zh: "研究发现，李白的情感表达与地理位置呈现显著的相关性。在长安时期，他的诗作多体现豪迈与自信；而在流放夜郎途中，悲愤与思乡之情达到顶峰。通过情感热力图，我们清晰地看到了诗人情绪随空间转移的动态变化轨迹。此外，量化分析显示“月”、“酒”、“水”是他诗歌中出现频率最高的三大核心意象，构建了其独特的浪漫主义符号系统。",
+            en: "The study reveals a significant correlation between Li Bai's emotional expression and his geographical location. During his time in Chang'an, his poems often reflected boldness and confidence, while during his exile to Yelang, sentiments of indignation and nostalgia peaked. Through the emotional heatmap, we clearly visualize the dynamic trajectory of the poet's mood shifting with space. Furthermore, quantitative analysis shows that 'Moon', 'Wine', and 'Water' are the three most frequent core images, constructing his unique romantic symbol system.."
+        };
+
+        const DATA_SOURCES = [
+            {
+                title: { zh: "1. 古籍数字资源：《李太白集注》（卷三十五：李太白年谱）", en: "1. Ancient Text Resources: Annotated Collection of Li Bai's Works (Vol. 35)" },
+                desc: "Wang, Q. (Qing Dynasty). Li Taibai Ji Zhu( 35: Li Taibai Nian Pu) [Annotated collection of Li Bai's works (Vol. 35: Chronological biography of Li Bai)]. Chinese Text Project. https://ctext.org/wiki.pl?if=en&chapter=886336&remap=gb"
+            },
+            {
+                title: { zh: "2. 数字可视化资源：唐宋文学编年地图（李白专题）", en: "2. Digital Visualization Resources: Chronological Literary Map of Tang and Song" },
+                desc: "Suzhou Tupu Information Technology Co., Ltd. (2025). Táng Sòng Wénxué Biānnián Dìtú - Lǐ Bái [Chronological literary map of Tang and Song dynasties - Li Bai] (Interactive digital map) [Data support: Wang, Z. P.]. CNKGraph. https://cnkgraph.com/Map/PoetLife?author=%e6%9d%8e%e7%99%bd"
+            }
+        ];
+
+        const PERIODS = [
+            { id: 'all', label: {zh: '全部', en: 'All'} },
+            { id: 'youth', label: {zh: '青年期', en: 'Youth'} },
+            { id: 'middle', label: {zh: '中年期', en: 'Middle Age'} },
+            { id: 'old', label: {zh: '老年期', en: 'Old Age'} }
+        ];
+
+const POEM_DATABASE = [
+    { y: 715, l: "四川江油", m: "豪放与激昂", t: "初月" },
+    { y: 715, l: "四川江油", m: "豪放与激昂", t: "雨后望月" },
+    { y: 715, l: "四川江油", m: "哀怨与悲伤", t: "对雨" },
+    { y: 715, l: "四川江油", m: "喜悦与欢乐", t: "晓晴" },
+    { y: 715, l: "四川江油", m: "哀怨与悲伤", t: "望夫石" },
+    { y: 718, l: "平武", m: "孤寂与落寞", t: "赠江油尉厅" },
+    { y: 718, l: "四川江油", m: "思乡与怀古", t: "寻雍尊师隐居" },
+    { y: 719, l: "四川江油", m: "友情与知己", t: "访戴天山道士不遇" },
+    { y: 720, l: "成都", m: "思乡与怀古", t: "登锦城散花楼" },
+    { y: 720, l: "成都", m: "思乡与怀古", t: "春感" },
+    { y: 720, l: "峨眉山", m: "喜悦与欢乐", t: "登峨眉山" },
+    { y: 720, l: "大匡山", m: "哀怨与悲伤", t: "上李邕" },
+    { y: 720, l: "四川江油", m: "友情与知己", t: "冬日归旧山" },
+    { y: 724, l: "四川江油", m: "友情与知己", t: "别匡山" },
+    { y: 724, l: "峨眉山", m: "喜悦与欢乐", t: "峨眉山月歌" },
+    { y: 724, l: "重庆", m: "思乡与怀古", t: "巴女词" },
+    { y: 725, l: "巫山", m: "豪放与激昂", t: "宿巫山下" },
+    { y: 725, l: "宜昌", m: "思乡与怀古", t: "渡荆门送别" },
+    { y: 725, l: "宜昌", m: "喜悦与欢乐", t: "荆门浮舟望蜀江" },
+    { y: 725, l: "宜昌", m: "哀怨与悲伤", t: "秋下荆门" },
+    { y: 725, l: "宜昌", m: "哀怨与悲伤", t: "江行寄远" },
+    { y: 725, l: "江陵", m: "豪放与激昂", t: "荆州歌" },
+    { y: 725, l: "江陵", m: "豪放与激昂", t: "古风 其三十三" },
+    { y: 725, l: "江陵", m: "思乡与怀古", t: "江上寄巴东故人" },
+    { y: 725, l: "九江庐山", m: "喜悦与欢乐", t: "望庐山瀑布水二首 其一" },
+    { y: 725, l: "九江庐山", m: "喜悦与欢乐", t: "望庐山瀑布水二首 其二" },
+    { y: 725, l: "九江庐山", m: "豪放与激昂", t: "登庐山五老峰" },
+    { y: 725, l: "天门山", m: "思乡与怀古", t: "望天门山" },
+    { y: 725, l: "南京（金陵）", m: "思乡与怀古", t: "金陵城西楼月下吟" },
+    { y: 725, l: "南京（金陵）", m: "思乡与怀古", t: "金陵望汉江" },
+    { y: 725, l: "南京（金陵）", m: "豪放与激昂", t: "金陵新亭" },
+    { y: 725, l: "南京（金陵）", m: "思乡与怀古", t: "月夜金陵怀古" },
+    { y: 725, l: "南京（金陵）", m: "豪放与激昂", t: "登瓦官寺阁" },
+    { y: 725, l: "南京（金陵）", m: "豪放与激昂", t: "送崔十二游天竺寺" },
+    { y: 725, l: "南京（金陵）", m: "哀怨与悲伤", t: "杂曲歌辞 长干行" },
+    { y: 725, l: "南京（金陵）", m: "友情与知己", t: "杨叛儿" },
+    { y: 725, l: "南京（金陵）", m: "友情与知己", t: "白纻辞三首" },
+    { y: 725, l: "南京（金陵）", m: "喜悦与欢乐", t: "舞曲歌辞 其二 白纻辞三首" },
+    { y: 725, l: "南京（金陵）", m: "豪放与激昂", t: "其三 白纻辞三首" },
+    { y: 726, l: "南京（金陵）", m: "友情与知己", t: "对酒" },
+    { y: 726, l: "南京（金陵）", m: "豪放与激昂", t: "金陵新亭" },
+    { y: 726, l: "南京（金陵）", m: "豪放与激昂", t: "陌上赠美人" },
+    { y: 726, l: "南京（金陵）", m: "哀怨与悲伤", t: "赠段七娘" },
+    { y: 726, l: "南京（金陵）", m: "友情与知己", t: "示金陵子" },
+    { y: 726, l: "南京（金陵）", m: "友情与知己", t: "出妓金陵子呈卢六四首" },
+    { y: 726, l: "南京（金陵）", m: "豪放与激昂", t: "东山吟" },
+    { y: 726, l: "南京（金陵）", m: "友情与知己", t: "秋夜板桥浦泛月独酌怀谢朓" },
+    { y: 726, l: "扬州", m: "豪放与激昂", t: "夜下征虏亭" },
+    { y: 726, l: "扬州", m: "友情与知己", t: "金陵酒肆留别" },
+    { y: 726, l: "扬州", m: "哀怨与悲伤", t: "口号" },
+    { y: 726, l: "扬州", m: "思乡与怀古", t: "相和歌辞 估客行" },
+    { y: 726, l: "扬州", m: "友情与知己", t: "广陵赠别" },
+    { y: 726, l: "扬州", m: "思乡与怀古", t: "别储邕之剡中" },
+    { y: 726, l: "嵊州（剡县）", m: "孤寂与落寞", t: "越女词" },
+    { y: 726, l: "嵊州（剡县）", m: "喜悦与欢乐", t: "越女词" },
+    { y: 726, l: "嵊州（剡县）", m: "友情与知己", t: "越女词" },
+    { y: 726, l: "嵊州（剡县）", m: "哀怨与悲伤", t: "越女词" },
+    { y: 726, l: "嵊州（剡县）", m: "喜悦与欢乐", t: "越女词" },
+    { y: 726, l: "嵊州（剡县）", m: "哀怨与悲伤", t: "西施" },
+    { y: 726, l: "嵊州（剡县）", m: "友情与知己", t: "浣纱石上女" },
+    { y: 726, l: "嵊州（剡县）", m: "喜悦与欢乐", t: "采莲曲" },
+    { y: 726, l: "嵊州（剡县）", m: "哀怨与悲伤", t: "渌水曲" },
+    { y: 726, l: "嵊州（剡县）", m: "豪放与激昂", t: "王右军" },
+    { y: 726, l: "扬州", m: "豪放与激昂", t: "秋日登扬州西灵塔" },
+    { y: 726, l: "扬州", m: "思乡与怀古", t: "淮南卧病书怀寄蜀中赵征君蕤" },
+    { y: 726, l: "扬州", m: "哀怨与悲伤", t: "秋夕旅怀" },
+    { y: 727, l: "襄阳", m: "喜悦与欢乐", t: "岘山怀古" },
+    { y: 727, l: "襄阳", m: "思乡与怀古", t: "寄弄月溪吴山人" },
+    { y: 727, l: "安陆", m: "友情与知己", t: "南轩松" },
+    { y: 727, l: "安陆", m: "思乡与怀古", t: "静夜思" },
+    { y: 727, l: "安陆", m: "哀怨与悲伤", t: "白毫子歌" },
+    { y: 727, l: "安陆", m: "思乡与怀古", t: "自巴東舟行經瞿唐峽登巫山最高峰晚還題壁" },
+    { y: 727, l: "安陆", m: "孤寂与落寞", t: "江上望皖公山" },
+    { y: 728, l: "武汉（江夏）", m: "友情与知己", t: "赠僧行融" },
+    { y: 728, l: "武汉（江夏）", m: "思乡与怀古", t: "黄鹤楼送孟浩然之广陵" },
+    { y: 729, l: "安陆", m: "喜悦与欢乐", t: "古风・其二十六" },
+    { y: 729, l: "安陆", m: "友情与知己", t: "古风・其二十七" },
+    { y: 729, l: "安陆", m: "豪放与激昂", t: "感兴六首・其五" },
+    { y: 729, l: "安陆", m: "孤寂与落寞", t: "古风・其五十二" },
+    { y: 729, l: "安陆", m: "喜悦与欢乐", t: "琴曲歌辞・秋思二首" },
+    { y: 729, l: "安陆", m: "友情与知己", t: "山中间答" },
+    { y: 729, l: "应城", m: "喜悦与欢乐", t: "安州应城玉女汤作" },
+    { y: 729, l: "安陆", m: "豪放与激昂", t: "感兴六首其六" },
+    { y: 729, l: "安陆", m: "哀怨与悲伤", t: "杂曲歌辞・长相思三首・其一" },
+    { y: 729, l: "安陆", m: "喜悦与欢乐", t: "拟古十二首・其十一" },
+    { y: 730, l: "西安（长安）", m: "哀怨与悲伤", t: "玉真公主别馆苦雨赠卫尉张卿二首" },
+    { y: 730, l: "西安（长安）", m: "哀怨与悲伤", t: "玉真公主别馆苦雨赠卫尉张卿二首" },
+    { y: 730, l: "西安（长安）", m: "豪放与激昂", t: "玉真仙人词" },
+    { y: 730, l: "西安（长安）", m: "思乡与怀古", t: "杂曲歌辞・长相思三首・其三" },
+    { y: 730, l: "西安（长安）", m: "友情与知己", t: "秦女卷衣" },
+    { y: 730, l: "西安（长安）", m: "豪放与激昂", t: "拟古十二首・其二" },
+    { y: 730, l: "西安（长安）", m: "友情与知己", t: "古风・其三十八" },
+    { y: 730, l: "西安（长安）", m: "友情与知己", t: "感遇四首・其二" },
+    { y: 730, l: "西安（长安）", m: "哀怨与悲伤", t: "读诸葛武侯传书怀赠长安崔少府叔封昆季" },
+    { y: 730, l: "西安（长安）", m: "豪放与激昂", t: "答长安崔少府叔封游终南翠微寺太宗皇帝金沙泉见寄" },
+    { y: 730, l: "西安（长安）", m: "思乡与怀古", t: "赠裴十四" },
+    { y: 730, l: "西安（长安）", m: "喜悦与欢乐", t: "夜别张五" },
+    { y: 730, l: "西安（长安）", m: "喜悦与欢乐", t: "秋山寄卫尉张卿及王徵君" },
+    { y: 730, l: "武功（太白山）", m: "哀怨与悲伤", t: "登太白峰" },
+    { y: 730, l: "岐山", m: "豪放与激昂", t: "凤台曲" },
+    { y: 730, l: "岐山", m: "豪放与激昂", t: "凤凰曲" },
+    { y: 730, l: "彬县（新平）", m: "友情与知己", t: "豳歌行上新平长史兄粲" },
+    { y: 730, l: "彬县（新平）", m: "哀怨与悲伤", t: "赠新平少年" },
+    { y: 730, l: "彬县（新平）", m: "哀怨与悲伤", t: "登新平楼" },
+    { y: 730, l: "黄陵（中部）", m: "豪放与激昂", t: "酬坊州王司马与阎正字对雪见赠" },
+    { y: 730, l: "黄陵（中部）", m: "友情与知己", t: "留别王司马嵩" },
+    { y: 730, l: "南阳", m: "豪放与激昂", t: "酬崔五郎中" },
+    { y: 730, l: "终南山", m: "哀怨与悲伤", t: "乌夜啼" },
+    { y: 731, l: "终南山", m: "友情与知己", t: "下终南山过斛斯山人宿置酒" },
+    { y: 731, l: "邠州", m: "思乡与怀古", t: "赠裴十四" },
+    { y: 731, l: "邠州", m: "哀怨与悲伤", t: "登新平楼" },
+    { y: 731, l: "邠州", m: "哀怨与悲伤", t: "赠新平少年" },
+    { y: 731, l: "嵩山", m: "喜悦与欢乐", t: "赠嵩山焦炼师（并序）" },
+    { y: 731, l: "洛阳", m: "喜悦与欢乐", t: "秋夜宿龙门香山寺，奉寄王方城十七丈，奉国莹上人、从弟幼成令问" },
+    { y: 732, l: "坊州", m: "思乡与怀古", t: "春归终南山松龙旧隐" },
+    { y: 732, l: "终南山", m: "友情与知己", t: "以诗代书答元丹丘" },
+    { y: 732, l: "终南山", m: "哀怨与悲伤", t: "行路难三首" },
+    { y: 732, l: "终南山", m: "友情与知己", t: "行路难三首" },
+    { y: 732, l: "终南山", m: "友情与知己", t: "行路难三首" },
+    { y: 732, l: "终南山", m: "思乡与怀古", t: "蜀道难" },
+    { y: 732, l: "商丘", m: "思乡与怀古", t: "梁园吟" },
+    { y: 732, l: "安陆", m: "思乡与怀古", t: "安陆白兆山桃花岩寄刘侍御绾" },
+    { y: 732, l: "安陆", m: "喜悦与欢乐", t: "待酒不至" },
+    { y: 732, l: "安陆", m: "哀怨与悲伤", t: "自遣" },
+    { y: 732, l: "安陆", m: "哀怨与悲伤", t: "月夜听卢子顺弹琴" },
+    { y: 732, l: "安陆", m: "豪放与激昂", t: "夏日山中" },
+    { y: 732, l: "安陆", m: "哀怨与悲伤", t: "北山独酌寄韦六" },
+    { y: 733, l: "嵩山", m: "豪放与激昂", t: "题元丹丘颖阳山居" },
+    { y: 733, l: "颖阳", m: "豪放与激昂", t: "元丹三歌" },
+    { y: 733, l: "颖阳", m: "喜悦与欢乐", t: "秋夜宿龙门香山寺奉寄王方城十七丈奉国莹上人从弟幼成令问" },
+    { y: 733, l: "颖阳", m: "哀怨与悲伤", t: "冬夜宿龙门觉起言志" },
+    { y: 733, l: "颖阳", m: "哀怨与悲伤", t: "梁甫吟" },
+    { y: 734, l: "襄阳", m: "喜悦与欢乐", t: "襄阳歌" },
+    { y: 734, l: "襄阳", m: "喜悦与欢乐", t: "襄阳曲四首其一" },
+    { y: 734, l: "襄阳", m: "哀怨与悲伤", t: "襄阳曲四首其二" },
+    { y: 734, l: "襄阳", m: "哀怨与悲伤", t: "襄阳曲四首其三" },
+    { y: 734, l: "襄阳", m: "哀怨与悲伤", t: "襄阳曲四首其四" },
+    { y: 734, l: "襄阳", m: "哀怨与悲伤", t: "大堤曲" },
+    { y: 734, l: "襄阳", m: "哀怨与悲伤", t: "赠从兄襄阳少府皓" },
+    { y: 734, l: "襄阳", m: "喜悦与欢乐", t: "春夜洛城闻笛" },
+    { y: 734, l: "襄阳", m: "哀怨与悲伤", t: "江夏别宋之悌" },
+    { y: 735, l: "恒山", m: "思乡与怀古", t: "太原早秋" },
+    { y: 736, l: "嵩山", m: "友情与知己", t: "酬岑勋见寻就元丹丘对酒相待以诗见招" },
+    { y: 736, l: "嵩山", m: "喜悦与欢乐", t: "观元丹丘坐巫山屏风" },
+    { y: 736, l: "嵩山", m: "思乡与怀古", t: "巫山枕障" },
+    { y: 736, l: "洛阳", m: "哀怨与悲伤", t: "将进酒" },
+    { y: 736, l: "洛阳", m: "思乡与怀古", t: "莹禅师房观山海图" },
+    { y: 738, l: "襄阳", m: "喜悦与欢乐", t: "春日归山寄孟浩然" },
+    { y: 738, l: "南阳", m: "豪放与激昂", t: "南都行" },
+    { y: 738, l: "南阳", m: "哀怨与悲伤", t: "南阳送客" },
+    { y: 738, l: "南阳", m: "豪放与激昂", t: "送友人" },
+    { y: 738, l: "宋城", m: "友情与知己", t: "赠孟浩然" },
+    { y: 738, l: "颖阳", m: "哀怨与悲伤", t: "颖阳别元丹丘之淮阳" },
+    { y: 738, l: "陈州", m: "孤寂与落寞", t: "送侯十一" },
+    { y: 738, l: "下邳", m: "哀怨与悲伤", t: "经下邳圯桥怀张子房" },
+    { y: 738, l: "淮阴", m: "友情与知己", t: "淮阴书怀寄王宋城" },
+    { y: 739, l: "安宜", m: "友情与知己", t: "赠徐安宜" },
+    { y: 739, l: "安宜", m: "思乡与怀古", t: "寄淮南友人" },
+    { y: 739, l: "安宜", m: "思乡与怀古", t: "白田马上闻莺" },
+    { y: 739, l: "扬州", m: "豪放与激昂", t: "少年行" },
+    { y: 739, l: "扬州", m: "哀怨与悲伤", t: "久别离" },
+    { y: 739, l: "溧阳", m: "友情与知己", t: "游溧阳北湖亭望瓦屋山怀古赠同旅" },
+    { y: 739, l: "苏州", m: "哀怨与悲伤", t: "见京兆韦参军量移东阳二首" },
+    { y: 739, l: "苏州", m: "思乡与怀古", t: "见京兆韦参军量移东阳二首" },
+    { y: 739, l: "苏州", m: "哀怨与悲伤", t: "送曲十少府" },
+    { y: 739, l: "杭州", m: "喜悦与欢乐", t: "与从侄杭州刺史良游天竺寺" },
+    { y: 739, l: "杭州", m: "友情与知己", t: "送侄良携二妓赴会稽戏有此赠" },
+    { y: 739, l: "当涂", m: "思乡与怀古", t: "夜泊牛渚怀古" },
+    { y: 739, l: "当涂", m: "思乡与怀古", t: "月夜江行寄崔宗之" },
+    { y: 739, l: "当涂", m: "喜悦与欢乐", t: "江上寄元六林宗" },
+    { y: 739, l: "当涂", m: "思乡与怀古", t: "拟古十二首 其一 " },
+    { y: 739, l: "武汉", m: "思乡与怀古", t: "送杨山人归天台" },
+    { y: 739, l: "江陵", m: "思乡与怀古", t: "郢门秋怀" },
+    { y: 740, l: "定陶", m: "思乡与怀古", t: "忆襄阳旧游赠马少府巨" },
+    { y: 740, l: "任城", m: "豪放与激昂", t: "五月东鲁行答汉上翁" },
+    { y: 740, l: "任城", m: "友情与知己", t: "咏邻女东窗海石榴" },
+    { y: 740, l: "任城", m: "豪放与激昂", t: "早秋赠裴十七仲堪" },
+    { y: 740, l: "任城", m: "思乡与怀古", t: "大庭库" },
+    { y: 740, l: "任城", m: "孤寂与落寞", t: "赠瑕丘王少府" },
+    { y: 740, l: "任城", m: "哀怨与悲伤", t: "鲁城北郭曲腰桑下送张子还嵩阳" },
+    { y: 740, l: "任城", m: "友情与知己", t: "送鲁郡刘长史迁弘农长史" },
+    { y: 740, l: "任城", m: "哀怨与悲伤", t: "古风其十（齐有倜傥生）" },
+    { y: 740, l: "任城", m: "思乡与怀古", t: "古风其十一（黄河走东溟）" },
+    { y: 740, l: "任城", m: "友情与知己", t: "嘲鲁儒" },
+    { y: 740, l: "任城", m: "喜悦与欢乐", t: "客中行" },
+    { y: 740, l: "徂徕山", m: "思乡与怀古", t: "送韩准裴政孔巢父还山" },
+    { y: 741, l: "济宁", m: "哀怨与悲伤", t: "送方士赵叟之东平" },
+    { y: 741, l: "济宁", m: "思乡与怀古", t: "东鲁见狄博通" },
+    { y: 741, l: "济宁", m: "友情与知己", t: "送薛九被谗去鲁" },
+    { y: 741, l: "济宁", m: "哀怨与悲伤", t: "别鲁颂" },
+    { y: 741, l: "济宁", m: "友情与知己", t: "赠从弟冽" },
+    { y: 741, l: "济宁", m: "友情与知己", t: "捣衣篇" },
+    { y: 741, l: "济宁", m: "豪放与激昂", t: "答友人赠乌纱帽" },
+    { y: 741, l: "单父", m: "思乡与怀古", t: "早秋单父南楼酬窦公衡" },
+    { y: 741, l: "单父", m: "思乡与怀古", t: "登单父陶少府半月台" },
+    { y: 741, l: "兖州", m: "孤寂与落寞", t: "鲁郡尧祠送张十四游河北" },
+    { y: 741, l: "叶县", m: "友情与知己", t: "秋日炼药院镊白发赠元六兄林宗" },
+    { y: 741, l: "叶县", m: "友情与知己", t: "凤笙篇" },
+    { y: 742, l: "泰安（乾封）", m: "豪放与激昂", t: "游泰山六首其一" },
+    { y: 742, l: "泰安（乾封）", m: "豪放与激昂", t: "游泰山六首其二" },
+    { y: 742, l: "泰安（乾封）", m: "豪放与激昂", t: "游泰山六首其三" },
+    { y: 742, l: "泰安（乾封）", m: "豪放与激昂", t: "游泰山六首其四" },
+    { y: 742, l: "泰安（乾封）", m: "思乡与怀古", t: "游泰山六首其五" },
+    { y: 742, l: "泰安（乾封）", m: "喜悦与欢乐", t: "游泰山六首其六" },
+    { y: 742, l: "长安", m: "豪放与激昂", t: "侍从游宿温泉宫作" },
+    { y: 742, l: "长安", m: "友情与知己", t: "温泉侍从归逢故人" },
+    { y: 742, l: "长安", m: "豪放与激昂", t: "驾去温泉宫后赠杨山人" },
+    { y: 742, l: "长安", m: "豪放与激昂", t: "高句丽" },
+    { y: 742, l: "长安", m: "友情与知己", t: "子夜四時歌四首·春歌" },
+    { y: 742, l: "长安", m: "思乡与怀古", t: "子夜四時歌四首·夏歌" },
+    { y: 742, l: "长安", m: "豪放与激昂", t: "子夜四時歌四首·秋歌" },
+    { y: 742, l: "长安", m: "哀怨与悲伤", t: "子夜四時歌四首·冬歌" },
+    { y: 742, l: "曲阜", m: "友情与知己", t: "酬张卿夜宿南陵见赠" },
+    { y: 742, l: "曲阜", m: "喜悦与欢乐", t: "南陵别儿童入京" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "宫中行乐词·其一" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "宫中行乐词·其二" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "宫中行乐词·其三" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "宫中行乐词·其四" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "宫中行乐词·其五" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "宫中行乐词·其六" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "宫中行乐词·其七" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "宫中行乐词·其八" },
+    { y: 743, l: "长安", m: "喜悦与欢乐", t: "侍从宜春苑奉诏赋龙池柳色初青听新莺百啭歌" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "清平调三首·其一" },
+    { y: 743, l: "长安", m: "友情与知己", t: "清平调三首·其二" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "清平调三首·其三" },
+    { y: 743, l: "长安", m: "喜悦与欢乐", t: "春日行" },
+    { y: 743, l: "长安", m: "喜悦与欢乐", t: "阳春歌" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "飞龙引二首其一（黄帝铸鼎于荆山）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "飞龙引二首其二（鼎湖流水清且闲）" },
+    { y: 743, l: "长安", m: "友情与知己", t: "上云乐" },
+    { y: 743, l: "长安", m: "友情与知己", t: "金门答苏秀才" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "效古二首其一（朝入天苑中）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "效古二首其二（自古有秀色）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "赠郭将军" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "送窦司马贬宜春" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "送程刘二侍御兼独孤判官赴安西幕府" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "送张遥之寿阳幕府" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "送外甥郑灌从军·其一" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "送外甥郑灌从军·其二" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "送外甥郑灌从军·其三" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "送族弟绾从军安西" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "送白利从金吾董将军西征" },
+    { y: 743, l: "长安", m: "思乡与怀古", t: "送祝八之江东赋得浣纱石" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "送长沙陈太守·其一" },
+    { y: 743, l: "长安", m: "思乡与怀古", t: "送长沙陈太守·其二" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "塞上曲" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "塞下曲六首其一（五月天山雪）" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "塞下曲六首其二（天兵下北荒）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "塞下曲六首其三（骏马如风飙）" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "塞下曲六首其四（白马黄金塞）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "塞下曲六首其五（塞虏乘秋下）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "塞下曲六首其六（烽火动沙漠）" },
+    { y: 743, l: "长安", m: "友情与知己", t: "独不见" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "从军行(从军玉门道)" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "紫骝马" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "关山月" },
+    { y: 743, l: "长安", m: "友情与知己", t: "思边" },
+    { y: 743, l: "长安", m: "喜悦与欢乐", t: "折杨柳" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "乌夜啼" },
+    { y: 743, l: "长安", m: "友情与知己", t: "春思" },
+    { y: 743, l: "长安", m: "喜悦与欢乐", t: "秋思其一（春阳如昨日）" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "秋思其一（阏氏黄叶落）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "春怨" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "胡无人行" },
+    { y: 743, l: "长安", m: "友情与知己", t: "相逢行（朝骑五花马）" },
+    { y: 743, l: "长安", m: "友情与知己", t: "朝下过卢郎中叙旧游" },
+    { y: 743, l: "长安", m: "喜悦与欢乐", t: "同族弟金城尉叔卿烛照山水壁画歌" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "西岳云台歌送丹丘子" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "望终南山寄紫阁隐者" },
+    { y: 743, l: "长安", m: "友情与知己", t: "下终南山过斛斯山人宿置酒" },
+    { y: 743, l: "长安", m: "思乡与怀古", t: "赠卢征君昆弟" },
+    { y: 743, l: "长安", m: "思乡与怀古", t: "君子有所思行" },
+    { y: 743, l: "长安", m: "思乡与怀古", t: "夕霁杜陵登楼寄韦繇" },
+    { y: 743, l: "长安", m: "思乡与怀古", t: "杜陵绝句" },
+    { y: 743, l: "长安", m: "友情与知己", t: "秋夜独坐怀故山" },
+    { y: 743, l: "长安", m: "思乡与怀古", t: "忆东山二首其一（不向东山久）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "忆东山二首其二（我今携谢妓）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "赠别王山人归布山" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "翰林读书言怀呈集贤诸学士" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "玉壶吟" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "惧谗" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "雉子斑" },
+    { y: 743, l: "长安", m: "友情与知己", t: "鞠歌行" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "古风其二十一（郢客吟白雪）" },
+    { y: 743, l: "长安", m: "友情与知己", t: "古风其四十四（绿萝纷葳蕤）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "古风其四十七（桃花开东园）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "感兴其四（芙蓉娇绿波）" },
+    { y: 743, l: "长安", m: "友情与知己", t: "咏槿二首其一（园花笑芳年）" },
+    { y: 743, l: "长安", m: "友情与知己", t: "咏槿二首其二（世人种桃李）" },
+    { y: 743, l: "长安", m: "友情与知己", t: "古风其四十九（美人出南国）" },
+    { y: 743, l: "长安", m: "友情与知己", t: "古风其五十（宋国梧台东）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "古风其五十六（越客采明珠）" },
+    { y: 743, l: "长安", m: "孤寂与落寞", t: "古风其十二（松柏本孤直）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "古风其三十九（登高望四海）" },
+    { y: 743, l: "长安", m: "友情与知己", t: "感遇四首其三（昔余闻姮娥）" },
+    { y: 743, l: "长安", m: "友情与知己", t: "感遇四首其四（宋玉事楚王）" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "怨歌行" },
+    { y: 743, l: "长安", m: "友情与知己", t: "长信宫" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "玉阶怨" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "怨情（美人捲珠簾）" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "于阗采花" },
+    { y: 743, l: "长安", m: "思乡与怀古", t: "长门怨二首其一（天回北斗挂西楼）" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "长门怨二首其二（桂殿长愁不记春）" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "妾薄命" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "怨情（新人如花虽可宠）" },
+    { y: 743, l: "长安", m: "友情与知己", t: "白头吟二首其一(锦水东北流）" },
+    { y: 743, l: "长安", m: "友情与知己", t: "白头吟二首其二（锦水东流碧）" },
+    { y: 743, l: "长安", m: "哀怨与悲伤", t: "夜坐吟" },
+    { y: 743, l: "长安", m: "友情与知己", t: "中山孺子妾歌" },
+    { y: 743, l: "长安", m: "豪放与激昂", t: "送羽林陶将军" },
+    { y: 744, l: "长安", m: "思乡与怀古", t: "送贺监归四明应制" },
+    { y: 744, l: "长安", m: "思乡与怀古", t: "送贺宾客归越" },
+    { y: 744, l: "长安", m: "豪放与激昂", t: "初出金门寻王侍御不遇咏壁上鹦鹉" },
+    { y: 744, l: "长安", m: "友情与知己", t: "东武吟" },
+    { y: 744, l: "长安", m: "友情与知己", t: "古风其二十二（秦水别陇首）" },
+    { y: 744, l: "长安", m: "友情与知己", t: "以诗代书答元丹丘" },
+    { y: 744, l: "长安", m: "友情与知己", t: "白云歌送刘十六归山" },
+    { y: 744, l: "长安", m: "友情与知己", t: "同王昌龄送族弟襄归桂阳二首其一（秦地见碧草）" },
+    { y: 744, l: "长安", m: "豪放与激昂", t: "同王昌龄送族弟襄归桂阳二首其二（尔家何在潇湘川）" },
+    { y: 744, l: "长安", m: "友情与知己", t: "送于十八应四子举落第还嵩山" },
+    { y: 744, l: "长安", m: "豪放与激昂", t: "送裴十八图南归嵩山二首其一（何处可为别）" },
+    { y: 744, l: "长安", m: "豪放与激昂", t: "送裴十八图南归嵩山二首其一（君思颍水绿）" },
+    { y: 744, l: "长安", m: "友情与知己", t: "古风其四十二（摇裔双白鸥）" },
+    { y: 744, l: "长安", m: "豪放与激昂", t: "行路难三首其三（有耳莫洗颍川水）" },
+    { y: 744, l: "长安", m: "豪放与激昂", t: "来日大难" },
+    { y: 744, l: "长安", m: "思乡与怀古", t: "灞陵行送别" },
+    { y: 744, l: "长安", m: "哀怨与悲伤", t: "月下独酌四首其一（花间一壶酒）" },
+    { y: 744, l: "长安", m: "哀怨与悲伤", t: "月下独酌四首其二（天若不爱酒）" },
+    { y: 744, l: "长安", m: "哀怨与悲伤", t: "月下独酌四首其三（三月咸阳城）" },
+    { y: 744, l: "长安", m: "哀怨与悲伤", t: "月下独酌四首其四（穷愁千万端）" },
+    { y: 744, l: "长安", m: "喜悦与欢乐", t: "把酒问月" },
+    { y: 744, l: "长安", m: "友情与知己", t: "沐浴子" },
+    { y: 744, l: "长安", m: "友情与知己", t: "上之回" },
+    { y: 744, l: "长安", m: "豪放与激昂", t: "上元夫人" },
+    { y: 744, l: "长安", m: "豪放与激昂", t: "古风其五۵（齐瑟弹东吟）" },
+    { y: 744, l: "长安", m: "友情与知己", t: "寓言三首其一（周公负斧扆）" },
+    { y: 744, l: "长安", m: "豪放与激昂", t: "寓言三首其二（遥裔双彩凤）" },
+    { y: 744, l: "长安", m: "友情与知己", t: "寓言三首其三（长安春色归）" },
+    { y: 744, l: "长安", m: "豪放与激昂", t: "乌栖曲" },
+    { y: 744, l: "长安", m: "豪放与激昂", t: "赠薛校书" },
+    { y: 744, l: "长安", m: "友情与知己", t: "古风其五（太白何苍苍）" },
+    { y: 744, l: "长安", m: "哀怨与悲伤", t: "古风其四十（凤饥不啄粟）" },
+    { y: 744, l: "长安", m: "豪放与激昂", t: "初出金门寻王侍御不遇咏壁上鹦鹉" },
+    { y: 744, l: "长安", m: "友情与知己", t: "东武吟" },
+    { y: 742, l: "泰安（乾封）", m: "豪放与激昂", t: "游泰山六首其一" },
+    { y: 742, l: "泰安（乾封）", m: "豪放与激昂", t: "游泰山六首其二" },
+    { y: 742, l: "泰安（乾封）", m: "豪放与激昂", t: "游泰山六首其三" },
+    { y: 742, l: "泰安（乾封）", m: "豪放与激昂", t: "游泰山六首其四" },
+    { y: 742, l: "泰安（乾封）", m: "思乡与怀古", t: "游泰山六首其五" },
+    { y: 742, l: "泰安（乾封）", m: "喜悦与欢乐", t: "游泰山六首其六" },
+    { y: 742, l: "曲阜", m: "友情与知己", t: "酬张卿夜宿南陵见赠" },
+    { y: 742, l: "曲阜", m: "喜悦与欢乐", t: "南陵别儿童入京" },
+    { y: 742, l: "商州", m: "喜悦与欢乐", t: "春陪商州裴使君游石娥溪" },
+    { y: 744, l: "商州", m: "思乡与怀古", t: "过四皓墓" },
+    { y: 744, l: "商州", m: "思乡与怀古", t: "商山四皓" },
+    { y: 744, l: "商州", m: "友情与知己", t: "山人劝酒" },
+    { y: 744, l: "商州", m: "豪放与激昂", t: "赠参寥子" },
+    { y: 744, l: "杞县（雍丘）", m: "豪放与激昂", t: "秋猎孟诸夜归置酒单父东楼观妓" },
+    { y: 744, l: "杞县（雍丘）", m: "豪放与激昂", t: "题雍丘崔明府丹灶" },
+    { y: 744, l: "杞县（雍丘）", m: "思乡与怀古", t: "送杨山人归嵩山" },
+    { y: 744, l: "杞县（雍丘）", m: "孤寂与落寞", t: "送蔡山人" },
+    { y: 744, l: "砀山", m: "喜悦与欢乐", t: "秋夜与刘砀山泛宴喜亭池" },
+    { y: 744, l: "聊城（博州）", m: "豪放与激昂", t: "观博平王志安少府山水粉图" },
+    { y: 744, l: "吴桥（安陵）", m: "思乡与怀古", t: "访道安陵遇盖寰为予造真箓临别留赠" },
+    { y: 744, l: "深州", m: "友情与知己", t: "赠饶阳张司户燧" },
+    { y: 744, l: "济南（齐州）", m: "孤寂与落寞", t: "奉饯高尊师如贵道士传道箓毕归北海" },
+    { y: 744, l: "济南（齐州）", m: "哀怨与悲伤", t: "草创大还赠柳官迪" },
+    { y: 744, l: "济宁（任城）", m: "哀怨与悲伤", t: "对雪奉饯任城六父秩满归京" },
+    { y: 744, l: "济宁（任城）", m: "哀怨与悲伤", t: "赠任城卢主簿潜" },
+    { y: 744, l: "济宁（任城）", m: "豪放与激昂", t: "怀仙歌" },
+    { y: 744, l: "济宁（任城）", m: "哀怨与悲伤", t: "古风其二十（昔我游齐都）" },
+    { y: 744, l: "济宁（任城）", m: "豪放与激昂", t: "古风其十九（泣与亲友别）" },
+    { y: 744, l: "济宁（任城）", m: "豪放与激昂", t: "感兴其五" },
+    { y: 744, l: "兖州（瑕丘）", m: "哀怨与悲伤", t: "送方士赵叟之东平" },
+    { y: 745, l: "曲阜", m: "思乡与怀古", t: "大庭库" },
+    { y: 745, l: "济南（齐州）", m: "思乡与怀古", t: "陪从祖济南太守泛鹊山湖三首其一（初谓鹊山近）" },
+    { y: 745, l: "济南（齐州）", m: "思乡与怀古", t: "陪从祖济南太守泛鹊山湖三首" },
+    { y: 745, l: "济南（齐州）", m: "思乡与怀古", t: "陪从祖济南太守泛鹊山湖三首" },
+    { y: 745, l: "济南（齐州）", m: "哀怨与悲伤", t: "东海有勇妇" },
+    { y: 745, l: "兖州（瑕丘）", m: "哀怨与悲伤", t: "寻鲁城北范居士失道落苍耳中见范置酒摘苍耳作" },
+    { y: 745, l: "兖州（瑕丘）", m: "豪放与激昂", t: "送范山人归太山" },
+    { y: 745, l: "兖州（瑕丘）", m: "哀怨与悲伤", t: "鲁郡东石门送杜二甫" },
+    { y: 745, l: "金乡", m: "哀怨与悲伤", t: "金乡送韦八之西京" },
+    { y: 745, l: "兖州（瑕丘）", m: "思乡与怀古", t: "赠崔侍郎（长剑一杯酒）" },
+    { y: 745, l: "兖州（瑕丘）", m: "思乡与怀古", t: "赠崔侍郎（黄河二尺鲤）" },
+    { y: 745, l: "单县（单父）", m: "孤寂与落寞", t: "单父东楼秋夜送族弟沈之秦" },
+    { y: 745, l: "单县（单父）", m: "哀怨与悲伤", t: "携妓登梁王栖霞山孟氏桃园中" },
+    { y: 745, l: "单县（单父）", m: "豪放与激昂", t: "送族弟凝至晏堌" },
+    { y: 745, l: "单县（单父）", m: "哀怨与悲伤", t: "送族弟凝之滁求婚崔氏" },
+    { y: 745, l: "单县（单父）", m: "思乡与怀古", t: "黄葛篇" },
+    { y: 745, l: "单县（单父）", m: "友情与知己", t: "古风其九（庄周梦胡蝶）" },
+    { y: 745, l: "单县（单父）", m: "哀怨与悲伤", t: "古风其二十三（秋露白如玉）" },
+    { y: 745, l: "单县（单父）", m: "友情与知己", t: "古风其四十一（朝弄紫泥海）" },
+    { y: 745, l: "单县（单父）", m: "哀怨与悲伤", t: "拟古十二首其三（长绳难系日）" },
+    { y: 745, l: "单县（单父）", m: "友情与知己", t: "拟古十二首其五（今日风日好）" },
+    { y: 745, l: "单县（单父）", m: "哀怨与悲伤", t: "拟古十二首其八（月色不可扫）" },
+    { y: 745, l: "单县（单父）", m: "友情与知己", t: "拟古十二首其九（生者为过客）" },
+    { y: 745, l: "单县（单父）", m: "喜悦与欢乐", t: "拟古十二首其十（仙人骑彩凤）" },
+    { y: 745, l: "兖州（瑕丘）", m: "思乡与怀古", t: "东鲁门泛舟二首" },
+    { y: 745, l: "兖州（瑕丘）", m: "哀怨与悲伤", t: "鲁郡尧祠送吴五之琅琊" },
+    { y: 746, l: "单县（单父）", m: "豪放与激昂", t: "族弟单父主簿凝摄宋城主簿至郭南月桥却回栖霞山留饮赠之" },
+    { y: 746, l: "兖州（瑕丘）", m: "豪放与激昂", t: "鲁东门观刈蒲" },
+    { y: 746, l: "兖州（瑕丘）", m: "豪放与激昂", t: "鲁中送二从弟赴举之西京" },
+    { y: 746, l: "兖州（瑕丘）", m: "孤寂与落寞", t: "邯郸才人嫁为厮养卒妇" },
+    { y: 746, l: "兖州（瑕丘）", m: "哀怨与悲伤", t: "赠裴司马" },
+    { y: 746, l: "兖州（瑕丘）", m: "思乡与怀古", t: "沙丘城下寄杜甫" },
+    { y: 746, l: "兖州（瑕丘）", m: "哀怨与悲伤", t: "秋日鲁郡尧祠亭上宴别杜补阙范侍御" },
+    { y: 746, l: "兖州（瑕丘）", m: "豪放与激昂", t: "鲁郡尧祠送窦明府薄华还西京" },
+    { y: 746, l: "兖州（瑕丘）", m: "友情与知己", t: "酬中都小吏携斗酒双鱼逆旅见赠" },
+    { y: 746, l: "兖州（瑕丘）", m: "友情与知己", t: "别中都明府兄" },
+    { y: 746, l: "兖州（瑕丘）", m: "思乡与怀古", t: "梦游天姥吟留别" },
+    { y: 746, l: "商丘（宋城）", m: "豪放与激昂", t: "鸣皋歌送岑征君" },
+    { y: 746, l: "商丘（宋城）", m: "友情与知己", t: "送岑征君归鸣皋山" },
+    { y: 746, l: "商丘（宋城）", m: "哀怨与悲伤", t: "对雪献从兄虞城宰" },
+    { y: 746, l: "扬州（江都）", m: "豪放与激昂", t: "淮海对雪赠傅霭" },
+    { y: 746, l: "扬州（江都）", m: "哀怨与悲伤", t: "题瓜洲新河饯族叔舍人贲" },
+    { y: 746, l: "扬州（江都）", m: "豪放与激昂", t: "留别广陵诸公" },
+    { y: 747, l: "镇江（丹阳）", m: "豪放与激昂", t: "焦山望松寥山" },
+    { y: 747, l: "镇江（丹阳）", m: "哀怨与悲伤", t: "丁都护歌" },
+    { y: 747, l: "南京（江宁）", m: "豪放与激昂", t: "金陵三首其一（晋家南渡日）" },
+    { y: 747, l: "南京（江宁）", m: "思乡与怀古", t: "金陵三首其二" },
+    { y: 747, l: "南京（江宁）", m: "思乡与怀古", t: "金陵三首其三" },
+    { y: 747, l: "南京（江宁）", m: "思乡与怀古", t: "登金陵凤凰台" },
+    { y: 747, l: "南京（江宁）", m: "友情与知己", t: "金陵歌送别范宣" },
+    { y: 747, l: "南京（江宁）", m: "豪放与激昂", t: "登金陵冶城西北谢安墩" },
+    { y: 747, l: "南京（江宁）", m: "思乡与怀古", t: "金陵白杨十字巷" },
+    { y: 747, l: "南京（江宁）", m: "哀怨与悲伤", t: "劳劳亭" },
+    { y: 747, l: "南京（江宁）", m: "友情与知己", t: "洗脚亭" },
+    { y: 747, l: "南京（江宁）", m: "哀怨与悲伤", t: "古风其三十七（燕臣昔恸哭）" },
+    { y: 747, l: "南京（江宁）", m: "思乡与怀古", t: "酬崔侍御" },
+    { y: 747, l: "南京（江宁）", m: "友情与知己", t: "登梅岗望金陵赠族侄高座寺僧中孚" },
+    { y: 747, l: "南京（江宁）", m: "友情与知己", t: "答族侄僧中孚赠玉泉仙人掌茶（并序）" },
+    { y: 747, l: "无锡", m: "喜悦与欢乐", t: "同族侄评事黯游昌禅师山池二首其一" },
+    { y: 747, l: "苏州", m: "思乡与怀古", t: "苏台览古" },
+    { y: 747, l: "湖州", m: "友情与知己", t: "答湖州迦叶司马问白是何人" },
+    { y: 747, l: "绍兴（会稽）", m: "友情与知己", t: "酬张司马赠墨" },
+    { y: 747, l: "绍兴（会稽）", m: "思乡与怀古", t: "求崔山人百丈崖瀑布图" },
+    { y: 747, l: "绍兴（会稽）", m: "友情与知己", t: "对酒忆贺监二首（并序）" },
+    { y: 747, l: "绍兴（会稽）", m: "友情与知己", t: "重忆一首" },
+    { y: 747, l: "绍兴（会稽）", m: "豪放与激昂", t: "越中览古" },
+    { y: 747, l: "绍兴（会稽）", m: "思乡与怀古", t: "同友人舟行遊台越作" },
+    { y: 747, l: "绍兴（会稽）", m: "思乡与怀古", t: "越中秋怀" },
+    { y: 747, l: "天台", m: "哀怨与悲伤", t: "登高丘而望远海" },
+    { y: 747, l: "天台", m: "豪放与激昂", t: "天台晓望" },
+    { y: 747, l: "天台", m: "豪放与激昂", t: "早望海霞边" },
+    { y: 747, l: "天台", m: "豪放与激昂", t: "古风其三（秦王扫六合）" },
+    { y: 747, l: "天台", m: "哀怨与悲伤", t: "古风其四十八（秦王按宝剑）" },
+    { y: 747, l: "天台", m: "友情与知己", t: "古风其十七（金华牧羊儿）" },
+    { y: 747, l: "天台", m: "思乡与怀古", t: "对酒行（松子棲金華）" },
+    { y: 747, l: "天台", m: "哀怨与悲伤", t: "日出入行" },
+    { y: 747, l: "南京（江宁）", m: "友情与知己", t: "送杨燕之东鲁" },
+    { y: 747, l: "南京（江宁）", m: "思乡与怀古", t: "送陆判官往琵琶峡" },
+    { y: 747, l: "南京（江宁）", m: "友情与知己", t: "江上送女道士褚三清游南岳" },
+    { y: 747, l: "南京（江宁）", m: "友情与知己", t: "白鸠辞" },
+    { y: 747, l: "南京（江宁）", m: "哀怨与悲伤", t: "野田黄雀行" },
+    { y: 747, l: "南京（江宁）", m: "哀怨与悲伤", t: "醉后赠从甥高镇" },
+    { y: 747, l: "南京（江宁）", m: "哀怨与悲伤", t: "赠别从甥高五" },
+    { y: 747, l: "南京（江宁）", m: "友情与知己", t: "金陵凤凰台置酒" },
+    { y: 747, l: "南京（江宁）", m: "友情与知己", t: "题金陵王处士水亭" },
+    { y: 747, l: "南京（江宁）", m: "思乡与怀古", t: "挂席江上待月有怀" },
+    { y: 747, l: "南京（江宁）", m: "哀怨与悲伤", t: "玩月金陵城西孙楚酒楼达曙歌吹日晚乘醉著紫绮裘乌纱巾与酒客数人棹歌秦淮往石头访崔四侍御" },
+    { y: 747, l: "南京（江宁）", m: "思乡与怀古", t: "自金陵溯流过白壁山玩月达天门寄句容王主簿" },
+    { y: 747, l: "南京（江宁）", m: "喜悦与欢乐", t: "金陵江上遇蓬池隐者" },
+    { y: 748, l: "扬州（江阳）", m: "友情与知己", t: "叙旧赠江阳宰陆调" },
+    { y: 748, l: "庐江（舒城）", m: "友情与知己", t: "寄上吴王三首其一" },
+    { y: 748, l: "庐江（舒城）", m: "哀怨与悲伤", t: "寄上吴王三首其二" },
+    { y: 748, l: "庐江（舒城）", m: "友情与知己", t: "寄上吴王三首其三" },
+    { y: 748, l: "庐江（舒城）", m: "喜悦与欢乐", t: "口号吴王美人半醉" },
+    { y: 748, l: "庐江（舒城）", m: "友情与知己", t: "庐江主人妇" },
+    { y: 748, l: "庐江（舒城）", m: "友情与知己", t: "同吴王送杜秀芝举入京" },
+    { y: 749, l: "南京（江宁）", m: "哀怨与悲伤", t: "闻王昌龄左迁龙标遥有此寄" },
+    { y: 749, l: "南京（江宁）", m: "友情与知己", t: "寄东鲁二稚子" },
+    { y: 749, l: "南京（江宁）", m: "思乡与怀古", t: "送萧三十一之鲁中兼问稚子伯禽" },
+    { y: 749, l: "南京（江宁）", m: "哀怨与悲伤", t: "雉朝飞" },
+    { y: 749, l: "南京（江宁）", m: "孤寂与落寞", t: "金陵送张十一再游东吴" },
+    { y: 749, l: "南京（江宁）", m: "思乡与怀古", t: "送纪秀才游越" },
+    { y: 749, l: "南京（江宁）", m: "友情与知己", t: "劳劳亭歌" },
+    { y: 749, l: "南京（江宁）", m: "思乡与怀古", t: "金陵城西楼月下吟" },
+    { y: 749, l: "南京（江宁）", m: "哀怨与悲伤", t: "答王十二寒夜独酌有怀" },
+    { y: 749, l: "南京（江宁）", m: "哀怨与悲伤", t: "战城南（去年戰桑乾源）" },
+    { y: 749, l: "南京（江宁）", m: "哀怨与悲伤", t: "君道曲" },
+    { y: 749, l: "南京（江宁）", m: "哀怨与悲伤", t: "古风其六（代马不思越）" },
+    { y: 749, l: "南京（江宁）", m: "哀怨与悲伤", t: "古风其十四（胡关饶风沙）" },
+    { y: 749, l: "南京（江宁）", m: "哀怨与悲伤", t: "雪谗诗赠友人" },
+    { y: 749, l: "南京（江宁）", m: "哀怨与悲伤", t: "古风其一（大雅久不作）" },
+    { y: 749, l: "南京（江宁）", m: "孤寂与落寞", t: "僧伽歌" },
+    { y: 749, l: "南京（江宁）", m: "思乡与怀古", t: "留别金陵诸公" },
+    { y: 749, l: "南京（江宁）", m: "友情与知己", t: "金陵白下亭留别" },
+    { y: 750, l: "当涂", m: "友情与知己", t: "登黄山凌歊台送族弟溧阳尉济充泛舟赴华阴" },
+    { y: 750, l: "当涂", m: "喜悦与欢乐", t: "赠丹阳横山周处士惟长" },
+    { y: 750, l: "九江（寻阳）", m: "友情与知己", t: "寻阳送弟昌峒鄱阳司马作" },
+    { y: 750, l: "九江（寻阳）", m: "喜悦与欢乐", t: "日夕山中忽然有怀" },
+    { y: 750, l: "九江（寻阳）", m: "思乡与怀古", t: "别东林寺僧" },
+    { y: 750, l: "九江（寻阳）", m: "友情与知己", t: "寻阳紫极宫感秋作" },
+    { y: 750, l: "九江（寻阳）", m: "思乡与怀古", t: "秋日与张少府楚城韦公藏书高斋作" },
+    { y: 750, l: "九江（寻阳）", m: "思乡与怀古", t: "送别（寻阳五溪水）" },
+    { y: 750, l: "亳州（谯郡）", m: "友情与知己", t: "感遇四首其一（吾爱王子晋）" },
+    { y: 750, l: "济宁（任城）", m: "友情与知己", t: "忆旧游寄谯郡元参军" },
+    { y: 750, l: "济宁（任城）", m: "友情与知己", t: "寄王屋山人孟大融" },
+    { y: 750, l: "济宁（任城）", m: "友情与知己", t: "鸣皋歌奉饯从翁清归五崖山居" },
+    { y: 751, l: "叶县", m: "友情与知己", t: "闻丹丘子于城北山营石门幽居中有高凤遗迹仆离群远怀亦有栖遁之志因叙旧以赠之" },
+    { y: 751, l: "叶县", m: "思乡与怀古", t: "寻高凤石门山中元丹丘" },
+    { y: 751, l: "叶县", m: "哀怨与悲伤", t: "与元丹丘方城寺谈玄作" },
+    { y: 751, l: "叶县", m: "哀怨与悲伤", t: "古风其三十四（羽檄如流星）" },
+    { y: 751, l: "叶县", m: "豪放与激昂", t: "赠何七判官昌浩" },
+    { y: 751, l: "叶县", m: "友情与知己", t: "陌上桑" },
+    { y: 751, l: "开封", m: "友情与知己", t: "留别于十一兄逖裴十三游塞垣" },
+    { y: 751, l: "开封", m: "哀怨与悲伤", t: "公无渡河" },
+    { y: 751, l: "滑县（白马）", m: "豪放与激昂", t: "发白马" },
+    { y: 751, l: "滑县（白马）", m: "哀怨与悲伤", t: "枯鱼过河泣" },
+    { y: 751, l: "安阳（邺郡）", m: "豪放与激昂", t: "邺中赠王大" },
+    { y: 752, l: "广平（清漳）", m: "友情与知己", t: "赠清漳明府侄聿" },
+    { y: 752, l: "邯郸", m: "友情与知己", t: "自广平乘醉走马六十里至邯郸登城楼览古书怀" },
+    { y: 752, l: "邯郸", m: "喜悦与欢乐", t: "邯郸南亭观妓" },
+    { y: 752, l: "邯郸", m: "豪放与激昂", t: "登邯郸洪波台置酒观发兵" },
+    { y: 752, l: "永年（临洺）", m: "思乡与怀古", t: "赠临洺县令皓弟" },
+    { y: 752, l: "大兴（范阳）", m: "豪放与激昂", t: "行行且游猎篇" },
+    { y: 752, l: "大兴（范阳）", m: "豪放与激昂", t: "出自蓟北门行" },
+    { y: 752, l: "大兴（范阳）", m: "豪放与激昂", t: "幽州胡马客歌" },
+    { y: 752, l: "大兴（范阳）", m: "哀怨与悲伤", t: "北风行" },
+    { y: 752, l: "大兴（范阳）", m: "哀怨与悲伤", t: "邹衍谷" },
+    { y: 752, l: "大兴（范阳）", m: "友情与知己", t: "送崔度还吴" },
+    { y: 752, l: "大兴（范阳）", m: "哀怨与悲伤", t: "代赠远" },
+    { y: 752, l: "大兴（范阳）", m: "哀怨与悲伤", t: "闺情" },
+    { y: 753, l: "魏县（贵乡）", m: "友情与知己", t: "魏郡别苏明府因北游" },
+    { y: 753, l: "汾阳（西河）", m: "友情与知己", t: "留别西河刘少府" },
+    { y: 753, l: "西安（长安）", m: "豪放与激昂", t: "戏赠杜甫" },
+    { y: 753, l: "西安（长安）", m: "豪放与激昂", t: "述德兼陈情上哥舒翰大夫" },
+    { y: 753, l: "西安（长安）", m: "友情与知己", t: "走笔赠独孤驸马" },
+    { y: 753, l: "西安（长安）", m: "友情与知己", t: "赠韦侍御黄裳二首" },
+    { y: 753, l: "西安（长安）", m: "思乡与怀古", t: "古风其四十六（一百四十年）" },
+    { y: 753, l: "西安（长安）", m: "友情与知己", t: "古风其八（咸阳二三月）" },
+    { y: 753, l: "西安（长安）", m: "哀怨与悲伤", t: "古风其五十四（倚剑登高台）" },
+    { y: 753, l: "西安（长安）", m: "友情与知己", t: "古风其五十一（殷后乱天纪）" },
+    { y: 753, l: "西安（长安）", m: "友情与知己", t: "酬王补阙惠翼庄庙宋丞泚赠别" },
+    { y: 753, l: "西安（长安）", m: "友情与知己", t: "古风其三十一（郑客西入关）" },
+    { y: 753, l: "西安（长安）", m: "哀怨与悲伤", t: "古风其三十六（抱玉入楚国）" },
+    { y: 753, l: "西安（长安）", m: "思乡与怀古", t: "古风其十八（天津三月时）" },
+    { y: 753, l: "西安（长安）", m: "哀怨与悲伤", t: "古风其二十五（世道日交丧）" },
+    { y: 753, l: "西安（长安）", m: "友情与知己", t: "古风其三十（玄风变太古）" },
+    { y: 753, l: "西安（长安）", m: "哀怨与悲伤", t: "古风其二十九（三季分战国）" },
+    { y: 753, l: "西安（长安）", m: "豪放与激昂", t: "古风其五十三（战国何纷纷）" },
+    { y: 753, l: "西安（长安）", m: "哀怨与悲伤", t: "远别离" },
+    { y: 753, l: "洛阳", m: "哀怨与悲伤", t: "忆崔郎中宗之游南阳遗吾孔子琴抚之潸然感旧" },
+    { y: 753, l: "定陶（曹州）", m: "思乡与怀古", t: "留别曹南群官之江南" },
+    { y: 753, l: "定陶（曹州）", m: "豪放与激昂", t: "书情赠蔡舍人雄" },
+    { y: 753, l: "定陶（曹州）", m: "哀怨与悲伤", t: "拟古十二首其十二（去去复去去）" },
+    { y: 753, l: "和县（历阳）", m: "友情与知己", t: "横江词六首其一" },
+    { y: 753, l: "和县（历阳）", m: "哀怨与悲伤", t: "横江词六首其二" },
+    { y: 753, l: "和县（历阳）", m: "思乡与怀古", t: "横江词六首其三" },
+    { y: 753, l: "和县（历阳）", m: "豪放与激昂", t: "横江词六首其四" },
+    { y: 753, l: "和县（历阳）", m: "哀怨与悲伤", t: "横江词六首其五" },
+    { y: 753, l: "和县（历阳）", m: "思乡与怀古", t: "横江词六首其六" },
+    { y: 753, l: "宣城", m: "友情与知己", t: "江上答崔宣城" },
+    { y: 753, l: "宣城", m: "哀怨与悲伤", t: "寄从弟宣州长史昭" },
+    { y: 753, l: "宣城", m: "孤寂与落寞", t: "赠从弟宣州长史昭" },
+    { y: 753, l: "宣城", m: "友情与知己", t: "宣城长史弟昭赠余琴溪中双舞鹤诗以见志" },
+    { y: 753, l: "宣城", m: "友情与知己", t: "赠崔司户文昆季" },
+    { y: 753, l: "宣城", m: "喜悦与欢乐", t: "送崔氏昆季之金陵" },
+    { y: 753, l: "宣城", m: "喜悦与欢乐", t: "过崔八丈水亭" },
+    { y: 753, l: "宣城", m: "豪放与激昂", t: "自梁园至敬亭山见会公谈陵阳山水兼期同游因有此赠" },
+    { y: 753, l: "宣城", m: "喜悦与欢乐", t: "秋登宣城谢朓北楼" },
+    { y: 753, l: "宣城", m: "喜悦与欢乐", t: "题宛溪馆" },
+    { y: 753, l: "宣城", m: "豪放与激昂", t: "游敬亭寄崔侍御" },
+    { y: 753, l: "宣城", m: "友情与知己", t: "宣城九日闻崔四侍御与宇文太守游敬亭余时登响山不同此赏醉后寄崔侍御二首其一（九日茱萸熟）" },
+    { y: 753, l: "宣城", m: "豪放与激昂", t: "宣城九日闻崔四侍御与宇文太守游敬亭余时登响山不同此赏醉后寄崔侍御二首其二（九卿天上落）" },
+    { y: 753, l: "宣城", m: "豪放与激昂", t: "九日登山" },
+    { y: 753, l: "宣城", m: "喜悦与欢乐", t: "九日" },
+    { y: 753, l: "宣城", m: "豪放与激昂", t: "赠宣城宇文太守兼呈崔侍御" },
+    { y: 753, l: "宣城", m: "友情与知己", t: "登敬亭北二小山余时客逢崔侍御并登此地" },
+    { y: 753, l: "宣城", m: "哀怨与悲伤", t: "观胡人吹笛" },
+    { y: 753, l: "宣城", m: "思乡与怀古", t: "谢公亭" },
+    { y: 753, l: "宣城", m: "哀怨与悲伤", t: "寄崔侍御" },
+    { y: 753, l: "宣城", m: "豪放与激昂", t: "登敬亭山南望怀古赠窦主簿" },
+    { y: 753, l: "宣城", m: "孤寂与落寞", t: "独坐敬亭山（衆鳥高飛盡）" },
+    { y: 753, l: "宣城", m: "豪放与激昂", t: "古朗月行" },
+    { y: 753, l: "宣城", m: "哀怨与悲伤", t: "古风其二（蟾蜍薄太清）" },
+    { y: 753, l: "宣城", m: "哀怨与悲伤", t: "宣州谢朓楼饯别校书叔云" },
+    { y: 753, l: "宣城", m: "喜悦与欢乐", t: "饯校书叔云" },
+    { y: 753, l: "宣城", m: "哀怨与悲伤", t: "古风其三十二（蓐收肃金气）" },
+    { y: 753, l: "宣城", m: "豪放与激昂", t: "古风其二十八（容颜若飞电）" },
+    { y: 753, l: "宣城", m: "孤寂与落寞", t: "古风其十三（君平既弃世）" },
+    { y: 753, l: "宣城", m: "喜悦与欢乐", t: "题东溪公幽居" },
+    { y: 753, l: "宣城", m: "思乡与怀古", t: "赠宣州灵源寺仲浚公" },
+    { y: 753, l: "宣城", m: "豪放与激昂", t: "听蜀僧浚弹琴" },
+    { y: 753, l: "宣城", m: "思乡与怀古", t: "送通禅师还南陵隐静寺" },
+    { y: 753, l: "宣城", m: "友情与知己", t: "别韦少府" },
+    { y: 753, l: "宣城", m: "友情与知己", t: "秋于敬亭送从侄耑游庐山序" },
+    { y: 754, l: "南京（江宁）", m: "思乡与怀古", t: "新林浦阻风寄友人" },
+    { y: 754, l: "南京（江宁）", m: "思乡与怀古", t: "春日陪杨江宁及诸官宴北湖感古作" },
+    { y: 754, l: "南京（江宁）", m: "思乡与怀古", t: "宿白鹭洲寄杨江宁" },
+    { y: 754, l: "溧阳", m: "友情与知己", t: "戏赠郑溧阳" },
+    { y: 754, l: "溧阳", m: "哀怨与悲伤", t: "春日独坐寄郑明府" },
+    { y: 754, l: "南京（江宁）", m: "友情与知己", t: "送友人游梅湖" },
+    { y: 754, l: "南京（江宁）", m: "哀怨与悲伤", t: "下途归石门旧居" },
+    { y: 754, l: "扬州", m: "友情与知己", t: "之广陵宿常二南郭幽居" },
+    { y: 754, l: "扬州", m: "喜悦与欢乐", t: "送储邕之武昌" },
+    { y: 754, l: "南京（江宁）", m: "豪放与激昂", t: "赠僧崖公" },
+    { y: 754, l: "南京（江宁）", m: "友情与知己", t: "送王屋山人魏万还王屋（并序）" },
+    { y: 754, l: "扬州", m: "哀怨与悲伤", t: "哭晁卿衡" },
+    { y: 754, l: "宣城", m: "思乡与怀古", t: "送温处士归黄山白鹅峰旧居" },
+    { y: 754, l: "宣城", m: "友情与知己", t: "赠黄山胡公求白鹇（并序）" },
+    { y: 754, l: "当涂", m: "友情与知己", t: "酬殷明佐见赠五云裘歌" },
+    { y: 754, l: "当涂", m: "哀怨与悲伤", t: "夜泊黄山闻殷十四吴吟" },
+    { y: 754, l: "当涂", m: "友情与知己", t: "殷十一赠栗冈砚" },
+    { y: 754, l: "池州（秋浦）", m: "友情与知己", t: "赠崔秋浦三首其一（吾爱崔秋浦）" },
+    { y: 754, l: "池州（秋浦）", m: "哀怨与悲伤", t: "赠崔秋浦三首其二" },
+    { y: 754, l: "池州（秋浦）", m: "友情与知己", t: "赠崔秋浦三首其三" },
+    { y: 754, l: "池州（秋浦）", m: "友情与知己", t: "赠秋浦柳少府" },
+    { y: 754, l: "池州（秋浦）", m: "豪放与激昂", t: "咏山樽二首其一（蟠木不彫饰）" },
+    { y: 754, l: "池州（秋浦）", m: "哀怨与悲伤", t: "咏山樽二首其二" },
+    { y: 754, l: "池州（秋浦）", m: "友情与知己", t: "赠柳圆" },
+    { y: 754, l: "池州（秋浦）", m: "思乡与怀古", t: "宣城清溪" },
+    { y: 754, l: "池州（秋浦）", m: "思乡与怀古", t: "清溪行" },
+    { y: 754, l: "池州（秋浦）", m: "喜悦与欢乐", t: "宿清溪主人" },
+    { y: 754, l: "池州（秋浦）", m: "哀怨与悲伤", t: "青溪半夜闻笛" },
+    { y: 754, l: "池州（秋浦）", m: "哀怨与悲伤", t: "秋浦歌十七首" },
+    { y: 754, l: "池州（秋浦）", m: "豪放与激昂", t: "白鹭鸶" },
+    { y: 754, l: "池州（秋浦）", m: "友情与知己", t: "闻谢杨儿吟猛虎词因有此赠" },
+    { y: 754, l: "池州（秋浦）", m: "豪放与激昂", t: "游秋浦白笴陂二首其一（何处夜行好）" },
+    { y: 754, l: "池州（秋浦）", m: "豪放与激昂", t: "游秋浦白笴陂二首其二（白笴夜长啸）" },
+    { y: 754, l: "池州（秋浦）", m: "喜悦与欢乐", t: "秋浦清溪雪夜对酒客有唱鹧鸪者" },
+    { y: 754, l: "池州（秋浦）", m: "哀怨与悲伤", t: "与周刚清溪玉镜潭宴别" },
+    { y: 754, l: "池州（秋浦）", m: "思乡与怀古", t: "古风其四（凤飞九千仞）" },
+    { y: 754, l: "池州（秋浦）", m: "友情与知己", t: "宿虾湖" },
+    { y: 754, l: "池州（秋浦）", m: "友情与知己", t: "独酌清溪江石上寄权昭夷" },
+    { y: 754, l: "池州（秋浦）", m: "豪放与激昂", t: "泾溪南蓝山下有落星潭可以卜筑余泊舟石上寄何判官昌浩" },
+    { y: 754, l: "池州（秋浦）", m: "哀怨与悲伤", t: "山鹧鸪词" },
+    { y: 755, l: "青阳", m: "豪放与激昂", t: "改九子山为九华山联句（并序）" },
+    { y: 755, l: "青阳", m: "豪放与激昂", t: "望九华山赠青阳韦仲堪" },
+    { y: 755, l: "青阳", m: "豪放与激昂", t: "望木瓜山" },
+    { y: 755, l: "泾县", m: "友情与知己", t: "酬崔十五见招" },
+    { y: 755, l: "泾县", m: "思乡与怀古", t: "泾溪东亭寄郑少府谔" },
+    { y: 755, l: "泾县", m: "喜悦与欢乐", t: "游水西简郑明府" },
+    { y: 755, l: "泾县", m: "喜悦与欢乐", t: "过汪氏别业二首" },
+    { y: 755, l: "泾县", m: "哀怨与悲伤", t: "赠汪伦" },
+    { y: 755, l: "泾县", m: "思乡与怀古", t: "别山僧" },
+    { y: 755, l: "泾县", m: "思乡与怀古", t: "寻山僧不遇作" },
+    { y: 755, l: "泾县", m: "思乡与怀古", t: "与谢良辅游泾川陵岩寺" },
+    { y: 755, l: "泾县", m: "友情与知己", t: "泾川送族弟錞" },
+    { y: 755, l: "泾县", m: "哀怨与悲伤", t: "下泾县陵阳溪至涩滩" },
+    { y: 755, l: "泾县", m: "豪放与激昂", t: "下陵阳沿高溪三门六刺滩" },
+    { y: 755, l: "泾县", m: "喜悦与欢乐", t: "早过漆林渡寄万巨" },
+    { y: 755, l: "当涂", m: "思乡与怀古", t: "当涂赵炎少府粉图山水歌" },
+    { y: 755, l: "当涂", m: "喜悦与欢乐", t: "陪族叔当涂宰游化城寺升公清风亭" },
+    { y: 755, l: "南陵", m: "友情与知己", t: "与南陵常赞府游五松山" },
+    { y: 755, l: "南陵", m: "友情与知己", t: "于五松山赠南陵常赞府" },
+    { y: 755, l: "南陵", m: "友情与知己", t: "书怀赠南陵常赞府" },
+    { y: 755, l: "南陵", m: "豪放与激昂", t: "纪南陵题五松山" },
+    { y: 755, l: "南陵", m: "友情与知己", t: "答杜秀才五松山见赠" },
+    { y: 755, l: "南陵", m: "友情与知己", t: "南陵五松山别荀七" },
+    { y: 755, l: "南陵", m: "哀怨与悲伤", t: "五松山送殷淑" },
+    { y: 755, l: "南陵", m: "豪放与激昂", t: "铜官山醉后绝句" },
+    { y: 755, l: "池州（秋浦）", m: "哀怨与悲伤", t: "秋浦寄内" },
+    { y: 755, l: "池州（秋浦）", m: "友情与知己", t: "自代内赠" },
+    { y: 755, l: "池州（秋浦）", m: "哀怨与悲伤", t: "秋浦感主人归燕寄内" },
+    { y: 755, l: "宣城", m: "思乡与怀古", t: "寄当涂赵少府炎" },
+    { y: 755, l: "宣城", m: "友情与知己", t: "赠宣城赵太守悦" },
+    { y: 755, l: "宣城", m: "友情与知己", t: "赠武十七谔（并序）" },
+    { y: 755, l: "扬州", m: "友情与知己", t: "送当涂赵少府赴长芦" },
+    { y: 755, l: "南京（江宁）", m: "哀怨与悲伤", t: "送赵判官赴黔府中丞叔幕" },
+    { y: 755, l: "南京（江宁）", m: "哀怨与悲伤", t: "答高山人兼呈权顾二侯" },
+    { y: 756, l: "商丘（宋城）", m: "哀怨与悲伤", t: "北上行" },
+    { y: 756, l: "商丘（宋城）", m: "思乡与怀古", t: "奔亡道中五首" },
+    { y: 756, l: "宣城", m: "豪放与激昂", t: "古风其十九（西上莲花山）" },
+    { y: 756, l: "宣城", m: "豪放与激昂", t: "经乱后将避地剡中留赠崔宣城" },
+    { y: 756, l: "溧阳", m: "哀怨与悲伤", t: "猛虎行" },
+    { y: 756, l: "溧阳", m: "哀怨与悲伤", t: "赠溧阳宋少府陟" },
+    { y: 756, l: "溧阳", m: "豪放与激昂", t: "赋得白鹭鸶送宋少府入三峡" },
+    { y: 756, l: "溧阳", m: "友情与知己", t: "扶风豪士歌" },
+    { y: 756, l: "溧阳", m: "哀怨与悲伤", t: "地藏菩萨赞" },
+    { y: 756, l: "杭州（钱塘）", m: "哀怨与悲伤", t: "杭州送裴大泽时赴庐州长史" },
+    { y: 756, l: "杭州（钱塘）", m: "友情与知己", t: "赠友人三首其一（兰生不当户）" },
+    { y: 756, l: "杭州（钱塘）", m: "友情与知己", t: "赠友人三首其二（袖中赵匕首）" },
+    { y: 756, l: "杭州（钱塘）", m: "友情与知己", t: "赠友人三首其三（慢世薄功业）" },
+    { y: 756, l: "杭州（钱塘）", m: "友情与知己", t: "赠常侍御" },
+    { y: 756, l: "杭州（钱塘）", m: "友情与知己", t: "感时留别从兄徐王延年从弟延陵" },
+    { y: 756, l: "杭州（钱塘）", m: "哀怨与悲伤", t: "菩萨蛮（平林漠漠煙如織）" },
+    { y: 756, l: "南京（江宁）", m: "思乡与怀古", t: "忆秦娥" },
+    { y: 756, l: "南京（江宁）", m: "哀怨与悲伤", t: "三五七言" },
+    { y: 756, l: "九江（寻阳）", m: "哀怨与悲伤", t: "赠王判官时余隐居庐山屏风叠" },
+    { y: 756, l: "九江（寻阳）", m: "友情与知己", t: "赠韦秘书子春" },
+    { y: 756, l: "九江（寻阳）", m: "孤寂与落寞", t: "别内赴征三首其一（王命三征去未还）" },
+    { y: 756, l: "九江（寻阳）", m: "思乡与怀古", t: "在水军宴赠幕府诸侍御" },
+    { y: 756, l: "九江（寻阳）", m: "友情与知己", t: "赠潘侍御论钱少阳" },
+    { y: 756, l: "九江（寻阳）", m: "喜悦与欢乐", t: "在水军宴韦司马楼船观妓" },
+    { y: 757, l: "丹阳", m: "哀怨与悲伤", t: "南奔书怀" },
+    { y: 757, l: "丹阳", m: "哀怨与悲伤", t: "空城雀" },
+    { y: 757, l: "丹阳", m: "友情与知己", t: "树中草" },
+    { y: 757, l: "九江（寻阳）", m: "哀怨与悲伤", t: "在寻阳非所寄内" },
+    { y: 757, l: "九江（寻阳）", m: "思乡与怀古", t: "系寻阳上崔相涣三首其一" },
+    { y: 757, l: "九江（寻阳）", m: "哀怨与悲伤", t: "系寻阳上崔相涣三首其二" },
+    { y: 757, l: "九江（寻阳）", m: "哀怨与悲伤", t: "系寻阳上崔相涣三首其三" },
+    { y: 757, l: "九江（寻阳）", m: "友情与知己", t: "感兴其一（瑶姬天帝女）" },
+    { y: 757, l: "九江（寻阳）", m: "友情与知己", t: "狱中上崔相涣" },
+    { y: 757, l: "九江（寻阳）", m: "哀怨与悲伤", t: "上崔相百忧章" },
+    { y: 757, l: "九江（寻阳）", m: "喜悦与欢乐", t: "送史司马赴崔相公幕" },
+    { y: 757, l: "九江（寻阳）", m: "友情与知己", t: "杂言用投丹阳知己兼奉宣慰判官" },
+    { y: 757, l: "九江（寻阳）", m: "豪放与激昂", t: "送张秀才谒高中丞（并序）" },
+    { y: 757, l: "九江（寻阳）", m: "豪放与激昂", t: "送张秀才从军" },
+    { y: 757, l: "九江（寻阳）", m: "哀怨与悲伤", t: "万愤词投魏郎中" },
+    { y: 757, l: "九江（寻阳）", m: "哀怨与悲伤", t: "古风其五十九（恻恻泣路歧）" },
+    { y: 757, l: "九江（寻阳）", m: "友情与知己", t: "箜篌谣" },
+    { y: 757, l: "九江（寻阳）", m: "豪放与激昂", t: "中丞宋公以吴兵三千赴河南军次寻阳脱余之囚参谋幕府因赠之" },
+    { y: 757, l: "九江（寻阳）", m: "友情与知己", t: "鼓吹入朝曲" },
+    { y: 757, l: "武汉（江夏）", m: "哀怨与悲伤", t: "陪宋中丞武昌夜饮怀古" },
+    { y: 757, l: "武汉（江夏）", m: "哀怨与悲伤", t: "上留田" },
+    { y: 757, l: "潜山", m: "孤寂与落寞", t: "江上望皖公山" },
+    { y: 757, l: "太湖", m: "豪放与激昂", t: "避地司空原言怀" },
+    { y: 757, l: "宿松", m: "思乡与怀古", t: "赠闾丘宿松" },
+    { y: 757, l: "宿松", m: "孤寂与落寞", t: "赠闾丘处士" },
+    { y: 757, l: "宿松", m: "豪放与激昂", t: "赠张相镐二首其一" },
+    { y: 757, l: "宿松", m: "思乡与怀古", t: "赠张相镐二首其二" },
+    { y: 757, l: "宿松", m: "哀怨与悲伤", t: "独漉篇" },
+    { y: 757, l: "宿松", m: "豪放与激昂", t: "古风其四十五（八荒驰惊飙）" },
+    { y: 757, l: "宿松", m: "豪放与激昂", t: "拟古十二首其六（运速天地闭）" },
+    { y: 757, l: "宿松", m: "豪放与激昂", t: "上皇西巡南京歌十首其一" },
+    { y: 757, l: "宿松", m: "思乡与怀古", t: "上皇西巡南京歌十首其二" },
+    { y: 757, l: "宿松", m: "思乡与怀古", t: "上皇西巡南京歌十首其三" },
+    { y: 757, l: "宿松", m: "豪放与激昂", t: "上皇西巡南京歌十首其四" },
+    { y: 757, l: "宿松", m: "喜悦与欢乐", t: "上皇西巡南京歌十首其五" },
+    { y: 757, l: "宿松", m: "思乡与怀古", t: "上皇西巡南京歌十首其六" },
+    { y: 757, l: "宿松", m: "思乡与怀古", t: "上皇西巡南京歌十首其七" },
+    { y: 757, l: "宿松", m: "豪放与激昂", t: "上皇西巡南京歌十首其八" },
+    { y: 757, l: "宿松", m: "喜悦与欢乐", t: "上皇西巡南京歌十首其九" },
+    { y: 757, l: "宿松", m: "豪放与激昂", t: "上皇西巡南京歌十首其十" },
+    { y: 757, l: "九江（寻阳）", m: "豪放与激昂", t: "流夜郎闻酺不预" },
+    { y: 757, l: "九江（寻阳）", m: "哀怨与悲伤", t: "流夜郎永华寺寄浔阳群官" },
+    { y: 757, l: "九江（寻阳）", m: "哀怨与悲伤", t: "双燕离" },
+    { y: 757, l: "九江（寻阳）", m: "哀怨与悲伤", t: "窜夜郎于乌江留别宗十六璟" },
+    { y: 757, l: "九江（寻阳）", m: "友情与知己", t: "流夜郎赠辛判官" },
+    { y: 758, l: "黄石", m: "哀怨与悲伤", t: "流夜郎至西塞驿寄裴隐" },
+    { y: 758, l: "武汉（江夏）", m: "友情与知己", t: "与史郎中钦听黄鹤楼上吹笛" },
+    { y: 758, l: "武汉（江夏）", m: "友情与知己", t: "张相公出镇荆州寻除太子詹事余时流夜郎行至江夏与张公相去千里公因太府丞王昔使车寄罗衣二事及五月五日赠余诗余答以此诗" },
+    { y: 758, l: "武汉（江夏）", m: "孤寂与落寞", t: "题江夏修静寺" },
+    { y: 758, l: "武汉（江夏）", m: "喜悦与欢乐", t: "流夜郎至江夏陪长史叔及薛明府宴兴德寺南阁" },
+    { y: 758, l: "武汉（江夏）", m: "哀怨与悲伤", t: "望鹦鹉洲怀祢衡" },
+    { y: 758, l: "武汉（江夏）", m: "喜悦与欢乐", t: "泛沔州城南郎官湖（并序）" },
+    { y: 758, l: "武汉（江夏）", m: "喜悦与欢乐", t: "寄王汉阳" },
+    { y: 758, l: "武汉（江夏）", m: "友情与知己", t: "醉题王汉阳厅" },
+    { y: 758, l: "岳阳（巴陵）", m: "友情与知己", t: "送郗昂谪巴中" },
+    { y: 758, l: "江陵（荆州）", m: "哀怨与悲伤", t: "赠别郑判官" },
+    { y: 758, l: "江陵（荆州）", m: "友情与知己", t: "留别龚处士" },
+    { y: 758, l: "江陵（荆州）", m: "豪放与激昂", t: "流夜郎题葵叶" },
+    { y: 758, l: "江陵（荆州）", m: "友情与知己", t: "赠易秀才" },
+    { y: 758, l: "江陵（荆州）", m: "哀怨与悲伤", t: "放后遇恩不沾" },
+    { y: 758, l: "宜昌（夷陵）", m: "友情与知己", t: "上三峡" },
+    { y: 758, l: "宜昌（夷陵）", m: "哀怨与悲伤", t: "南流夜郎寄内" },
+    { y: 759, l: "巫山", m: "思乡与怀古", t: "自巴东舟行经瞿塘峡登巫山最高峰晚还题壁" },
+    { y: 759, l: "巫山", m: "思乡与怀古", t: "古风其五十八（我行巫山渚）" },
+    { y: 759, l: "巫山", m: "友情与知己", t: "忆秋浦桃花旧游时窜夜郎" },
+    { y: 759, l: "奉节", m: "思乡与怀古", t: "早发白帝城" },
+    { y: 759, l: "武汉（江夏）", m: "友情与知己", t: "自汉阳病酒归寄王明府" },
+    { y: 759, l: "武汉（江夏）", m: "友情与知己", t: "赠王汉阳" },
+    { y: 759, l: "武汉（江夏）", m: "哀怨与悲伤", t: "流夜郎半道承恩放还兼欣剋复之美书怀示息秀才" },
+    { y: 759, l: "武汉（江夏）", m: "友情与知己", t: "江夏赠韦南陵冰" },
+    { y: 759, l: "武汉（江夏）", m: "豪放与激昂", t: "赠从弟南平太守之遥二首其二（东平与南平）" },
+    { y: 759, l: "武汉（江夏）", m: "豪放与激昂", t: "江夏寄汉阳辅录事" },
+    { y: 759, l: "武汉（江夏）", m: "哀怨与悲伤", t: "经乱离后天恩流夜郎忆旧游书怀赠江夏韦太守良宰" },
+    { y: 759, l: "武汉（江夏）", m: "友情与知己", t: "将游衡岳过汉阳双松亭留别族弟浮屠谈皓" },
+    { y: 759, l: "武汉（江夏）", m: "喜悦与欢乐", t: "江上吟" },
+    { y: 759, l: "武汉（江夏）", m: "友情与知己", t: "江夏使君叔席上赠史郎中" },
+    { y: 759, l: "武汉（江夏）", m: "思乡与怀古", t: "江夏送倩公归汉东序" },
+    { y: 759, l: "武汉（江夏）", m: "友情与知己", t: "酬裴侍御留岫师弹琴见寄" },
+    { y: 759, l: "武汉（江夏）", m: "豪放与激昂", t: "天马歌" },
+    { y: 759, l: "临湘", m: "豪放与激昂", t: "至鸭栏驿上白马矶赠裴侍御" },
+    { y: 759, l: "岳阳（巴陵）", m: "哀怨与悲伤", t: "答裴侍御先行至石头驿以书见招期月满泛洞庭" },
+    { y: 759, l: "岳阳（巴陵）", m: "喜悦与欢乐", t: "夜泛洞庭寻裴侍御清酌" },
+    { y: 759, l: "岳阳（巴陵）", m: "哀怨与悲伤", t: "酬裴侍御对雨感时见赠" },
+    { y: 759, l: "岳阳（巴陵）", m: "喜悦与欢乐", t: "秋登巴陵望洞庭" },
+    { y: 759, l: "岳阳（巴陵）", m: "哀怨与悲伤", t: "巴陵赠贾舍人" },
+    { y: 759, l: "岳阳（巴陵）", m: "思乡与怀古", t: "与贾至舍人于龙兴寺剪落梧桐枝望㴩湖" },
+    { y: 759, l: "岳阳（巴陵）", m: "思乡与怀古", t: "陪族叔刑部侍郎晔及中书贾舍人至游洞庭五首其一" },
+    { y: 759, l: "岳阳（巴陵）", m: "喜悦与欢乐", t: "陪族叔刑部侍郎晔及中书贾舍人至游洞庭五首其二" },
+    { y: 759, l: "岳阳（巴陵）", m: "思乡与怀古", t: "陪族叔刑部侍郎晔及中书贾舍人至游洞庭五首其三" },
+    { y: 759, l: "岳阳（巴陵）", m: "思乡与怀古", t: "陪族叔刑部侍郎晔及中书贾舍人至游洞庭五首其四" },
+    { y: 759, l: "岳阳（巴陵）", m: "思乡与怀古", t: "陪族叔刑部侍郎晔及中书贾舍人至游洞庭五首其五" },
+    { y: 759, l: "岳阳（巴陵）", m: "喜悦与欢乐", t: "陪侍郎叔游洞庭醉后三首其一" },
+    { y: 759, l: "岳阳（巴陵）", m: "喜悦与欢乐", t: "陪侍郎叔游洞庭醉后三首其二" },
+    { y: 759, l: "岳阳（巴陵）", m: "哀怨与悲伤", t: "陪侍郎叔游洞庭醉后三首其三" },
+    { y: 759, l: "岳阳（巴陵）", m: "友情与知己", t: "洞庭醉后送绛州吕使君杲流澧州" },
+    { y: 759, l: "岳阳（巴陵）", m: "思乡与怀古", t: "送别（寻阳五溪水）" },
+    { y: 759, l: "岳阳（巴陵）", m: "豪放与激昂", t: "与夏十二登岳阳楼" },
+    { y: 759, l: "岳阳（巴陵）", m: "哀怨与悲伤", t: "荆州贼乱临洞庭言怀作" },
+    { y: 759, l: "岳阳（巴陵）", m: "豪放与激昂", t: "九日登巴陵置酒望洞庭水军" },
+    { y: 759, l: "岳阳（巴陵）", m: "思乡与怀古", t: "司马将军歌" },
+    { y: 759, l: "岳阳（巴陵）", m: "豪放与激昂", t: "临江王节士歌" },
+    { y: 759, l: "永州（零陵）", m: "哀怨与悲伤", t: "赠别舍人弟台卿之江" },
+    { y: 759, l: "永州（零陵）", m: "思乡与怀古", t: "赠卢司户" },
+    { y: 759, l: "永州（零陵）", m: "豪放与激昂", t: "草书歌行" },
+    { y: 759, l: "永州（零陵）", m: "喜悦与欢乐", t: "秋夕书怀" },
+    { y: 759, l: "永州（零陵）", m: "哀怨与悲伤", t: "门有车马客行" },
+    { y: 759, l: "永州（零陵）", m: "豪放与激昂", t: "鸣雁行" },
+    { y: 760, l: "岳阳（巴陵）", m: "豪放与激昂", t: "春滞沅湘有怀山中" },
+    { y: 760, l: "岳阳（巴陵）", m: "友情与知己", t: "登巴陵开元寺西阁赠衡岳僧方外" },
+    { y: 760, l: "武汉（江夏）", m: "喜悦与欢乐", t: "早春寄王汉阳" },
+    { y: 760, l: "武汉（江夏）", m: "豪放与激昂", t: "望汉阳柳色寄王宰" },
+    { y: 760, l: "武汉（江夏）", m: "豪放与激昂", t: "与诸公送陈郎将归衡阳（并序）" },
+    { y: 760, l: "武汉（江夏）", m: "思乡与怀古", t: "醉后答丁十八以诗讥予搥碎黄鹤楼" },
+    { y: 760, l: "武汉（江夏）", m: "哀怨与悲伤", t: "寄韦南陵冰余江上乘兴访之遇寻颜尚书笑有此赠" },
+    { y: 760, l: "武汉（江夏）", m: "友情与知己", t: "鹦鹉洲" },
+    { y: 760, l: "武汉（江夏）", m: "友情与知己", t: "博平郑太守自庐山千里相寻入江夏北市门见访却之武陵立马赠别" },
+    { y: 760, l: "武汉（江夏）", m: "思乡与怀古", t: "酬谈少府" },
+    { y: 760, l: "武汉（江夏）", m: "友情与知己", t: "赠汉阳辅录事二首其一（闻君罢官意）" },
+    { y: 760, l: "武汉（江夏）", m: "友情与知己", t: "赠汉阳辅录事二首其二（鹦鹉洲横汉阳渡）" },
+    { y: 760, l: "武汉（江夏）", m: "思乡与怀古", t: "峨眉山月歌送蜀僧晏入中京" },
+    { y: 760, l: "武汉（江夏）", m: "豪放与激昂", t: "望黄鹤山" },
+    { y: 760, l: "武汉（江夏）", m: "豪放与激昂", t: "赠崔咨议" },
+    { y: 760, l: "九江（寻阳）", m: "哀怨与悲伤", t: "禅房怀友人岑伦" },
+    { y: 760, l: "九江（寻阳）", m: "思乡与怀古", t: "庐山谣寄卢侍御虚舟" },
+    { y: 760, l: "九江（寻阳）", m: "思乡与怀古", t: "和卢侍御通塘曲" },
+    { y: 760, l: "九江（寻阳）", m: "孤寂与落寞", t: "庐山东林寺夜怀" },
+    { y: 760, l: "九江（寻阳）", m: "喜悦与欢乐", t: "下寻阳城泛彭蠡寄黄判官" },
+    { y: 760, l: "九江（寻阳）", m: "哀怨与悲伤", t: "送王孝廉觐省" },
+    { y: 760, l: "九江（寻阳）", m: "喜悦与欢乐", t: "过彭蠡湖" },
+    { y: 760, l: "九江（寻阳）", m: "友情与知己", t: "入彭蠡经松门观石镜缅怀谢康乐题诗书游览之志" },
+    { y: 760, l: "南昌（豫章）", m: "哀怨与悲伤", t: "豫章行" },
+    { y: 760, l: "南昌（豫章）", m: "思乡与怀古", t: "江西送友人之罗浮" },
+    { y: 760, l: "南昌（豫章）", m: "友情与知己", t: "对酒醉题屈突明府厅" },
+    { y: 761, l: "九江（寻阳）", m: "友情与知己", t: "送内寻庐山女道士李腾空二首其一（君寻腾空子）" },
+    { y: 761, l: "九江（寻阳）", m: "友情与知己", t: "送内寻庐山女道士李腾空二首其二（多君相门里）" },
+    { y: 761, l: "怀远（钟离）", m: "友情与知己", t: "江上赠窦长史" },
+    { y: 761, l: "南京（江宁）", m: "友情与知己", t: "三山望金陵寄殷淑" },
+    { y: 761, l: "南京（江宁）", m: "哀怨与悲伤", t: "送殷淑三首其一（海水不可解）" },
+    { y: 761, l: "南京（江宁）", m: "豪放与激昂", t: "送殷淑三首其二（白鹭洲前月）" },
+    { y: 761, l: "南京（江宁）", m: "哀怨与悲伤", t: "送殷淑三首其三（痛饮龙筇下）" },
+    { y: 761, l: "南京（江宁）", m: "友情与知己", t: "赠升州王使君忠臣" },
+    { y: 761, l: "南京（江宁）", m: "友情与知己", t: "对酒（劝君莫拒杯）" },
+    { y: 761, l: "南京（江宁）", m: "友情与知己", t: "江南春怀" },
+    { y: 761, l: "南京（江宁）", m: "豪放与激昂", t: "金陵听韩侍御吹笛" },
+    { y: 761, l: "南京（江宁）", m: "喜悦与欢乐", t: "送韩侍御之广德" },
+    { y: 761, l: "南京（江宁）", m: "豪放与激昂", t: "闻李太尉大举秦兵百万出征东南懦夫请缨冀申一割之用半道病还留别金陵崔侍御十九韵" },
+    { y: 761, l: "宜兴（义兴）", m: "哀怨与悲伤", t: "赠从孙义兴宰铭" },
+    { y: 761, l: "宣城", m: "豪放与激昂", t: "宣城送刘副使入秦" },
+    { y: 761, l: "宣城", m: "喜悦与欢乐", t: "哭宣城善酿纪叟" },
+    { y: 761, l: "宣城", m: "思乡与怀古", t: "宣城哭蒋征君华" },
+    { y: 761, l: "泾县", m: "豪放与激昂", t: "至陵阳山登天柱石酬韩侍御见招隐黄山" },
+    { y: 761, l: "当涂", m: "友情与知己", t: "献从叔当涂宰阳冰" },
+    { y: 762, l: "当涂", m: "友情与知己", t: "游谢氏山亭" },
+    { y: 762, l: "当涂", m: "友情与知己", t: "田园言怀" },
+    { y: 762, l: "当涂", m: "思乡与怀古", t: "览镜书怀" },
+    { y: 762, l: "当涂", m: "哀怨与悲伤", t: "见野草中有名白头翁者" },
+    { y: 762, l: "当涂", m: "喜悦与欢乐", t: "宣城见杜鹃花" },
+    { y: 761, l: "和县（历阳）", m: "友情与知己", t: "对雪醉后赠王历阳" },
+    { y: 761, l: "和县（历阳）", m: "友情与知己", t: "醉后赠王历阳" },
+    { y: 761, l: "和县（历阳）", m: "哀怨与悲伤", t: "嘲王历阳不肯饮酒" },
+    { y: 761, l: "和县（历阳）", m: "喜悦与欢乐", t: "赠历阳褚司马" },
+    { y: 761, l: "和县（历阳）", m: "友情与知己", t: "历阳壮士勤将军名思齐歌（并序）" },
+    { y: 762, l: "溧阳", m: "友情与知己", t: "自溧水道哭王炎三首其一" },
+    { y: 762, l: "溧阳", m: "哀怨与悲伤", t: "自溧水道哭王炎三首其二" },
+    { y: 762, l: "溧阳", m: "哀怨与悲伤", t: "自溧水道哭王炎三首其三" },
+    { y: 762, l: "扬州", m: "豪放与激昂", t: "夜下征虏亭" },
+    { y: 762, l: "扬州", m: "思乡与怀古", t: "白田马上闻莺" },
+    { y: 762, l: "当涂", m: "喜悦与欢乐", t: "九日龙山饮" },
+    { y: 762, l: "当涂", m: "豪放与激昂", t: "九月十日即事" },
+    { y: 762, l: "当涂", m: "哀怨与悲伤", t: "笑歌行" },
+    { y: 762, l: "当涂", m: "哀怨与悲伤", t: "悲歌行" },
+    { y: 762, l: "当涂", m: "哀怨与悲伤", t: "临终歌" }
+];
+
+
+
+// === 1. 真实人物节点数据 (已添加英文名) ===
+const REAL_NODES_DATA = [
+    { id: 32540, label: { zh: "李白", en: "Li Bai" }, group: 0, weight: 100 },
+    { id: 3915, label: { zh: "杜甫", en: "Du Fu" }, group: 1, weight: 20 },
+    { id: 439016, label: { zh: "于逖", en: "Yu Ti" }, group: 1, weight: 5 },
+    { id: 445762, label: { zh: "元丹丘", en: "Yuan Danqiu" }, group: 1, weight: 15 },
+    { id: 445895, label: { zh: "张谓", en: "Zhang Wei" }, group: 1, weight: 5 },
+    { id: 446337, label: { zh: "赵蕤", en: "Zhao Rui" }, group: 1, weight: 5 },
+    { id: 447477, label: { zh: "孟浩然", en: "Meng Haoran" }, group: 1, weight: 15 },
+    { id: 447547, label: { zh: "贺知章", en: "He Zhizhang" }, group: 2, weight: 10 },
+    { id: 448796, label: { zh: "孔巢父", en: "Kong Chaofu" }, group: 1, weight: 8 },
+    { id: 449635, label: { zh: "裴隐", en: "Pei Yin" }, group: 1, weight: 5 },
+    { id: 450435, label: { zh: "陶沔", en: "Tao Mian" }, group: 1, weight: 5 },
+    { id: 450444, label: { zh: "王昌龄", en: "Wang Changling" }, group: 1, weight: 10 },
+    { id: 92116, label: { zh: "杨贵妃", en: "Yang Guifei" }, group: 2, weight: 10 },
+    { id: 93661, label: { zh: "高力士", en: "Gao Lishi" }, group: 3, weight: 8 },
+    { id: 93700, label: { zh: "李隆基", en: "Emperor Xuanzong" }, group: 2, weight: 12 },
+    { id: 1899, label: { zh: "李阳冰", en: "Li Yangbing" }, group: 0, weight: 8 },
+    { id: 11362, label: { zh: "汪伦", en: "Wang Lun" }, group: 1, weight: 12 },
+    { id: 3269, label: { zh: "岑参", en: "Cen Shen" }, group: 1, weight: 8 },
+    { id: 1727, label: { zh: "高适", en: "Gao Shi" }, group: 1, weight: 10 },
+    { id: 11400, label: { zh: "王维", en: "Wang Wei" }, group: 1, weight: 8 },
+    { id: 1424, label: { zh: "崔颢", en: "Cui Hao" }, group: 1, weight: 6 },
+    { id: 11358, label: { zh: "阿倍仲麻吕", en: "Abe no Nakamaro" }, group: 1, weight: 7 },
+    { id: 1989, label: { zh: "郭子仪", en: "Guo Ziyi" }, group: 2, weight: 9 },
+    { id: 92770, label: { zh: "玉真公主", en: "Princess Yuzhen" }, group: 2, weight: 8 },
+    { id: 3624, label: { zh: "许夫人", en: "Lady Xu" }, group: 0, weight: 6 },
+    { id: 3625, label: { zh: "宗夫人", en: "Lady Zong" }, group: 0, weight: 6 },
+    { id: 2542, label: { zh: "李龟年", en: "Li Guinian" }, group: 1, weight: 5 },
+    { id: 1432, label: { zh: "张旭", en: "Zhang Xu" }, group: 1, weight: 5 },
+    { id: 11520, label: { zh: "吴筠", en: "Wu Yun" }, group: 1, weight: 5 },
+    { id: 98322, label: { zh: "魏颢", en: "Wei Hao" }, group: 1, weight: 6 },
+    { id: 3058, label: { zh: "宋之悌", en: "Song Zhiti" }, group: 3, weight: 5 },
+    { id: 3060, label: { zh: "宋之问", en: "Song Zhiwen" }, group: 3, weight: 5 },
+    { id: 11397, label: { zh: "王翰", en: "Wang Han" }, group: 1, weight: 4 },
+    { id: 1427, label: { zh: "崔宗之", en: "Cui Zongzhi" }, group: 1, weight: 4 },
+    { id: 1907, label: { zh: "贾至", en: "Jia Zhi" }, group: 2, weight: 4 },
+    { id: 3073, label: { zh: "苏颋", en: "Su Ting" }, group: 2, weight: 4 },
+    { id: 1715, label: { zh: "韩朝宗", en: "Han Chaozong" }, group: 2, weight: 6 },
+    { id: 3262, label: { zh: "伯禽", en: "Boqin (Son)" }, group: 0, weight: 4 },
+    { id: 3263, label: { zh: "平阳", en: "Pingyang (Daughter)" }, group: 0, weight: 4 },
+    { id: 3659, label: { zh: "刘全白", en: "Liu Quanbai" }, group: 1, weight: 3 },
+    { id: 11359, label: { zh: "李白之兄", en: "Li Bai's Brother" }, group: 0, weight: 2 },
+    { id: 11360, label: { zh: "李白之弟", en: "Li Bai's Brother" }, group: 0, weight: 2 },
+    { id: 92053, label: { zh: "李白之妻", en: "Li Bai's Wife" }, group: 0, weight: 2 },
+    { id: 11361, label: { zh: "明月奴", en: "Mingyuenu" }, group: 0, weight: 2 },
+    { id: 3264, label: { zh: "颇黎", en: "Poli" }, group: 0, weight: 2 },
+    { id: 1762, label: { zh: "李邕", en: "Li Yong" }, group: 1, weight: 5 },
+    { id: 3672, label: { zh: "李白之父", en: "Li Bai's Father" }, group: 0, weight: 2 },
+    { id: 3270, label: { zh: "独孤及", en: "Dugu Ji" }, group: 1, weight: 3 },
+    { id: 1892, label: { zh: "李华", en: "Li Hua" }, group: 1, weight: 3 },
+    { id: 1729, label: { zh: "韦应物", en: "Wei Yingwu" }, group: 1, weight: 3 },
+    { id: 1428, label: { zh: "刘长卿", en: "Liu Changqing" }, group: 1, weight: 3 },
+    { id: 11395, label: { zh: "张九龄", en: "Zhang Jiuling" }, group: 2, weight: 6 },
+    { id: 11396, label: { zh: "孟浩然", en: "Meng Haoran" }, group: 1, weight: 6 },
+    { id: 11398, label: { zh: "王湾", en: "Wang Wan" }, group: 1, weight: 3 },
+    { id: 11399, label: { zh: "祖咏", en: "Zu Yong" }, group: 1, weight: 3 },
+    { id: 11401, label: { zh: "储光羲", en: "Chu Guangxi" }, group: 1, weight: 3 },
+    { id: 11402, label: { zh: "王之涣", en: "Wang Zhihuan" }, group: 1, weight: 3 },
+    { id: 11403, label: { zh: "李颀", en: "Li Qi" }, group: 1, weight: 3 },
+    { id: 11404, label: { zh: "崔颢", en: "Cui Hao" }, group: 1, weight: 3 },
+    { id: 11405, label: { zh: "高适", en: "Gao Shi" }, group: 1, weight: 3 },
+    { id: 11406, label: { zh: "岑参", en: "Cen Shen" }, group: 1, weight: 3 },
+    { id: 11407, label: { zh: "王昌龄", en: "Wang Changling" }, group: 1, weight: 3 },
+    { id: 11409, label: { zh: "杜甫", en: "Du Fu" }, group: 1, weight: 3 },
+    { id: 11410, label: { zh: "元结", en: "Yuan Jie" }, group: 1, weight: 3 },
+    { id: 11411, label: { zh: "韦应物", en: "Wei Yingwu" }, group: 1, weight: 3 },
+    { id: 11412, label: { zh: "柳宗元", en: "Liu Zongyuan" }, group: 1, weight: 3 },
+    { id: 11413, label: { zh: "刘禹锡", en: "Liu Yuxi" }, group: 1, weight: 3 },
+    { id: 11414, label: { zh: "白居易", en: "Bai Juyi" }, group: 1, weight: 3 },
+    { id: 11415, label: { zh: "韩愈", en: "Han Yu" }, group: 1, weight: 3 },
+    { id: 11416, label: { zh: "孟郊", en: "Meng Jiao" }, group: 1, weight: 3 },
+    { id: 11417, label: { zh: "贾岛", en: "Jia Dao" }, group: 1, weight: 3 },
+    { id: 11418, label: { zh: "李贺", en: "Li He" }, group: 1, weight: 3 },
+    { id: 11419, label: { zh: "杜牧", en: "Du Mu" }, group: 1, weight: 3 },
+    { id: 11420, label: { zh: "李商隐", en: "Li Shangyin" }, group: 1, weight: 3 }
+];
+
+// --- SERVICE (DeepSeek API Integration) ---
+
+        // 1. 定义 API Key (这一行必须只有一个)
+// Securely retrieve the key (Base64 encoded)
+        const DEEPSEEK_API_KEY = (function() {
+            // 这里是你的新 Key (sk-166bc7fc...) 的加密版本
+            const encrypted = "c2stMTY2YmM3ZmM1ZmQ2NDIwMmI2ZDIyZWRiZTA0ZjUzMjE=";
+            try {
+                return atob(encrypted); // 运行时自动解密
+            } catch (e) {
+                console.error("Key decoding failed");
+                return "";
+            }
+        })();
+
+        // 2. 定义调用函数 (这一段也必须只有一个)
+        const callDeepSeekAPI = async (promptType, params, lang) => {
+            // 检查 Key 是否存在
+            if (!DEEPSEEK_API_KEY) {
+                return lang === 'zh' ? "API配置错误: 缺少密钥。" : "API Configuration Error: Missing Key.";
+            }
+
+            const langInstruction = lang === 'en' ? "Please answer in English." : "请用中文回答。";
+            let sys = "", user = params.query || "";
+
+            // 根据不同的请求类型，设置不同的提示词
+    if (promptType === 'three_ages') {
+        // 🔥 修改开始：这里使用了更严格的命令，强迫 AI 把答案切成三份
+        sys = `你现在必须分饰三个时期的李白来回答用户的问题。
+
+        ⚠️⚠️⚠️ 极其严格的输出格式要求：
+        请务必严格使用 "|||" (三个竖线) 将三段回答分开。绝对不要加"青年："或"中年："的前缀，直接写回答内容。
+
+        标准输出格式如下：
+        青年时期的回答内容|||中年时期的回答内容|||老年时期的回答内容
+
+        人设要求：
+        1. 第一段（青年）：20岁出头。轻狂傲岸，目空一切，辞藻华丽，充满锐气。
+        2. 第二段（中年）：40岁左右。豪迈中带着怀才不遇的愤懑，渴望建功立业，爱喝酒。
+        3. 第三段（老年）：60岁左右。历经流放与战乱，看透世事，沧桑达观，带有仙气与无奈，思乡。
+
+        ${langInstruction}`;
+        // 🔥 修改结束
+    } else if (promptType === 'general') {
+                sys = `你是一位精通李白生平的专家AI。请用通俗幽默的语言回答。 ${langInstruction}`;
+            } else if (promptType === 'analysis') {
+                sys = `你是一位唐代文学专家。请分析李白在${params.y}年于${params.l}写的《${params.t}》。格式：### 📜 全诗呈现\n(默写)\n### 🎭 情感解析\n(结合${params.m})\n### 🌍 历史背景\n${langInstruction}`;
+                user = `分析《${params.t}》`;
+            }
+
+            try {
+                const res = await fetch("https://api.deepseek.com/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${DEEPSEEK_API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        model: "deepseek-chat",
+                        messages: [{role:"system",content:sys},{role:"user",content:user}],
+                        temperature: 0.7
+                    })
+                });
+                const d = await res.json();
+
+                if (d.error) {
+                    console.error("DeepSeek API Error:", d.error);
+                    return lang === 'zh' ? "API 请求失败，请稍后再试。" : "API request failed, please try again later.";
+                }
+
+                return d.choices[0].message.content;
+            } catch (e) {
+                console.error("Network Error:", e);
+                return lang === 'zh' ? "网络迷踪... (API Error)" : "Network lost... (API Error)";
+            }
+        };
+
+        const Typewriter = ({ lang }) => {
+            const phrases = TYPEWRITER_PHRASES[lang];
+            const [index, setIndex] = useState(0);
+            const [subIndex, setSubIndex] = useState(0);
+            const [reverse, setReverse] = useState(false);
+
+            useEffect(() => {
+                setIndex(0);
+                setSubIndex(0);
+                setReverse(false);
+            }, [lang]);
+
+            useEffect(() => {
+                if (index >= phrases.length) { setIndex(0); return; }
+                const currentPhrase = phrases[index];
+                let timeoutValue = 150;
+                if (reverse) timeoutValue = 50;
+                if (!reverse && subIndex === currentPhrase.length) timeoutValue = 2000;
+                if (reverse && subIndex === 0) timeoutValue = 500;
+
+                const timer = setTimeout(() => {
+                    if (!reverse && subIndex === currentPhrase.length) { setReverse(true); return; }
+                    if (reverse && subIndex === 0) { setReverse(false); setIndex((prev) => (prev + 1) % phrases.length); return; }
+                    setSubIndex((prev) => prev + (reverse ? -1 : 1));
+                }, timeoutValue);
+                return () => clearTimeout(timer);
+            }, [subIndex, index, reverse, phrases]);
+
+            return (
+                <div className="flex flex-col">
+                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-tight text-gray-900 mb-2">
+                        {T['home.hero.title'][lang]}
+                    </h1>
+                    <div className="text-5xl md:text-7xl font-bold tracking-tight leading-tight min-h-[1.2em]">
+                        <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 text-transparent bg-clip-text animate-gradient-x">
+                            {phrases[index].substring(0, subIndex)}
+                        </span>
+                        <span className="ml-1 inline-block w-1 h-12 md:h-16 bg-gray-800 animate-blink align-middle mb-2"></span>
+                    </div>
+                </div>
+            );
+        };
+
+        const SearchSection = ({ onSearch, loading, lang }) => {
+            const [query, setQuery] = useState('');
+            const [mode, setMode] = useState('general');
+            const [menuOpen, setMenuOpen] = useState(false);
+            const dropdownRef = useRef(null);
+
+            useEffect(() => {
+                const handleClickOutside = (event) => {
+                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setMenuOpen(false);
+                };
+                document.addEventListener("mousedown", handleClickOutside);
+                return () => document.removeEventListener("mousedown", handleClickOutside);
+            }, []);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (query.trim()) onSearch(query, mode);
+            };
+
+            return (
+                <div className="w-full max-w-2xl mx-auto px-4 relative z-50">
+                    <form onSubmit={handleSubmit} className="relative group">
+                        <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl blur opacity-25 group-hover:opacity-75 transition duration-1000"></div>
+                        <div className="relative flex items-center bg-white rounded-3xl leading-none shadow-sm h-16">
+                            <div className="relative h-full flex items-center border-r border-gray-100" ref={dropdownRef}>
+                                <button type="button" onClick={() => setMenuOpen(!menuOpen)} className="flex items-center gap-2 px-5 h-full text-sm font-bold text-gray-700 hover:text-blue-600 transition-colors whitespace-nowrap bg-gray-50 hover:bg-gray-100 rounded-l-3xl min-w-[120px] justify-between">
+                                    {mode === 'general' ? T['search.btn'][lang] : T['search.btn_alt'][lang]}
+                                    <span className="text-xs opacity-50">▼</span>
+                                </button>
+                                {menuOpen && (
+                                    <div className="absolute top-full left-0 mt-2 w-full bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50 overflow-hidden animate-fade-up">
+                                        <button type="button" onClick={() => { setMode('general'); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm hover:bg-blue-50">{T['search.btn'][lang]}</button>
+                                        <button type="button" onClick={() => { setMode('three_ages'); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm hover:bg-purple-50">{T['search.btn_alt'][lang]}</button>
+                                    </div>
+                                )}
+                            </div>
+                            <input type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder={T['search.placeholder'][lang]} className="flex-1 h-full py-2 px-4 text-gray-900 bg-transparent border-0 ring-0 outline-none focus:ring-0 text-lg font-serif placeholder-gray-400" />
+                            <button type="submit" disabled={loading} className="px-6 h-full text-blue-600 hover:text-blue-800 transition-colors rounded-r-3xl hover:bg-blue-50 flex items-center justify-center">
+                                {loading ? <span className="animate-spin">⌛</span> : <span className="text-xl">➤</span>}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            );
+        };
+
+        const ChartCanvas = ({ type, data, options }) => {
+            const canvasRef = useRef(null);
+            const chartInstanceRef = useRef(null);
+            useEffect(() => {
+                if (canvasRef.current) {
+                    if (chartInstanceRef.current) chartInstanceRef.current.destroy();
+                    if (window.ChartDataLabels) window.Chart.register(window.ChartDataLabels);
+                    chartInstanceRef.current = new window.Chart(canvasRef.current, { type, data, options });
+                }
+                return () => { if (chartInstanceRef.current) chartInstanceRef.current.destroy(); };
+            }, [type, data, options]);
+            return <canvas ref={canvasRef} />;
+        };
+
+        const EmotionMapPage = ({ viewType, onBack, lang }) => {
+            const [activeEmotion, setActiveEmotion] = useState('joy');
+            const [activePeriod, setActivePeriod] = useState('all');
+            const mapInstanceRef = useRef(null);
+            const heatLayerRef = useRef(null);
+
+            const [sY, setSY] = useState(''); const [sL, setSL] = useState(''); const [sM, setSM] = useState(''); const [sT, setST] = useState('');
+            const [aiRes, setAiRes] = useState(null); const [aiLoading, setAiLoading] = useState(false);
+
+            const listYears = useMemo(() => [...new Set(POEM_DATABASE.map(i => i.y))].sort(), []);
+            const listLocs = useMemo(() => sY ? [...new Set(POEM_DATABASE.filter(i => i.y === Number(sY)).map(i => i.l))] : [], [sY]);
+            const listMoods = useMemo(() => sL ? [...new Set(POEM_DATABASE.filter(i => i.y === Number(sY) && i.l === sL).map(i => i.m))] : [], [sY, sL]);
+            const listTitles = useMemo(() => sM ? [...new Set(POEM_DATABASE.filter(i => i.y === Number(sY) && i.l === sL && i.m === sM).map(i => i.t))] : [], [sY, sL, sM]);
+
+            const handleAnalyze = async () => {
+                setAiLoading(true);
+                const res = await callDeepSeekAPI('analysis', { y: sY, l: sL, m: sM, t: sT }, lang);
+                setAiRes(res);
+                setAiLoading(false);
+            };
+
+            useEffect(() => {
+                if (viewType !== 'map') return;
+                const timer = setTimeout(() => {
+                    if (!mapInstanceRef.current && window.L && document.getElementById('em-map')) {
+                        const m = window.L.map('em-map', { center: [33.0, 110.0], zoom: 5, zoomControl: false, attributionControl: false });
+                        window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(m);
+                        mapInstanceRef.current = m;
+                    }
+                    if (mapInstanceRef.current) {
+                        const m = mapInstanceRef.current;
+                        if (heatLayerRef.current) heatLayerRef.current.remove();
+                        const category = EMOTION_MAP_DATA[activeEmotion];
+                        const pts = category.points.filter(p => activePeriod === 'all' || p.period === activePeriod).map(p => [p.lat, p.lng, p.intensity]);
+
+                        let gradient = { 0.3: 'blue', 0.5: 'lime', 0.7: 'yellow', 1.0: 'red' };
+                        if (category.color === 'orange') gradient = { 0.2: '#fbbf24', 0.6: '#f59e0b', 1: '#b45309' };
+                        if (category.color === 'red') gradient = { 0.2: '#f87171', 0.6: '#dc2626', 1: '#991b1b' };
+                        if (category.color === 'grey') gradient = { 0.2: '#9ca3af', 0.6: '#4b5563', 1: '#111827' };
+                        if (category.color === 'purple') gradient = { 0.2: '#a78bfa', 0.6: '#7c3aed', 1: '#4c1d95' };
+                        if (category.color === 'green') gradient = { 0.2: '#34d399', 0.6: '#059669', 1: '#064e3b' };
+
+                        if (window.L.heatLayer) heatLayerRef.current = window.L.heatLayer(pts, { radius: 50, blur: 30, max: 2.0, minOpacity: 0.65, gradient }).addTo(m);
+                    }
+                }, 50);
+                return () => { clearTimeout(timer); if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; } };
+            }, [viewType, activeEmotion, activePeriod]);
+
+            const pieData = useMemo(() => ({
+                labels: ANALYTICS_DATA_FULL.map(i => lang === 'zh' ? i.name : i.enName),
+                datasets: [{
+                    data: ANALYTICS_DATA_FULL.map(i => i.value),
+                    backgroundColor: ANALYTICS_DATA_FULL.map(i => i.color),
+                    borderWidth: 0
+                }]
+            }), [lang]);
+
+            const pieOptions = useMemo(() => ({
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        color: '#fff',
+                        font: { weight: 'bold', size: 12 },
+                        formatter: (value, ctx) => ctx.chart.data.labels[ctx.dataIndex],
+                        textShadowColor: 'rgba(0,0,0,0.3)', textShadowBlur: 2
+                    }
+                }
+            }), []);
+
+            return (
+                <div className="fixed inset-0 z-50 bg-white flex flex-col">
+                    <div className="absolute top-0 left-0 right-0 z-[1000] pointer-events-none flex flex-col md:flex-row justify-between p-4 md:p-6 gap-4">
+                        {viewType === 'map' ? (
+                            <div className="pointer-events-auto bg-white/95 backdrop-blur shadow-xl rounded-2xl p-5 border border-gray-200 max-w-md w-full flex flex-col gap-5">
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-900 font-serif">{T['emotion.title'][lang]}</h2>
+                                    <p className="text-xs text-gray-500 mt-1">{T['emotion.subtitle'][lang]}</p>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">{T['emotion.period'][lang]}</label>
+                                    <div className="flex bg-gray-100 rounded-lg p-1">
+                                        {PERIODS.map(p => (
+                                            <button key={p.id} onClick={() => setActivePeriod(p.id)} className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${activePeriod === p.id ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>{p.label[lang]}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">{T['emotion.core'][lang]}</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {Object.entries(EMOTION_MAP_DATA).map(([key, { label, enLabel, color }]) => (
+                                            <button key={key} onClick={() => setActiveEmotion(key)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all border ${activeEmotion === key ? 'bg-gray-800 text-white border-gray-800 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                                                <span className="w-3 h-3 rounded-full shadow-sm border border-white/20" style={{ backgroundColor: color === 'grey' ? '#374151' : color }}></span>
+                                                {lang === 'zh' ? label : enLabel}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : <div></div>}
+                        <button onClick={onBack} className="pointer-events-auto h-10 px-4 rounded-full bg-white shadow-lg border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium">✕ {T['emotion.exit'][lang]}</button>
+                    </div>
+
+                    {viewType === 'map' && <div id="em-map" className="w-full h-full relative z-0 bg-stone-50"></div>}
+
+                    {viewType === 'stats' && (
+                        <div className="flex-1 relative bg-stone-50 overflow-y-auto custom-scrollbar pt-20 px-6 pb-20">
+                            <div className="max-w-6xl mx-auto space-y-12">
+                                <div className="text-center mb-8"><h2 className="text-3xl font-bold font-serif text-gray-800">{T['emotion.stats_title'][lang]}</h2></div>
+
+                                <div className="grid md:grid-cols-2 gap-12 items-stretch">
+                                    <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 h-full flex flex-col items-center justify-between">
+                                        <h3 className="text-lg font-bold mb-6 text-gray-800 w-full text-left border-l-4 border-blue-800 pl-3">{T['emotion.fav_words'][lang]}</h3>
+                                        <div className="w-full h-72 relative flex justify-center">
+                                            <ChartCanvas type="doughnut" data={pieData} options={pieOptions} />
+                                        </div>
+                                        <div className="w-full mt-6 flex h-5 rounded-full overflow-hidden">
+                                            {ANALYTICS_DATA_FULL.map((item, i) => {
+                                                const percent = Math.round((item.value / TOTAL_VALUE) * 100);
+                                                return (
+                                                    <div key={i} className="h-full flex items-center justify-center text-[10px] text-white/90 font-bold" style={{ width: `${percent}%`, background: item.color }} title={`${lang === 'zh' ? item.name : item.enName} ${percent}%`}>
+                                                        {percent > 5 ? `${percent}%` : ''}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 h-full flex flex-col">
+                                        <h3 className="text-lg font-bold mb-6 text-gray-800 border-l-4 border-blue-800 pl-3">{T['emotion.dist'][lang]}</h3>
+                                        <div className="space-y-5 flex-1">
+                                            {ANALYTICS_DATA_FULL.map((item, idx) => (
+                                                <div key={idx} className="group">
+                                                    <div className="flex justify-between text-sm mb-2 font-bold text-gray-700">
+                                                        <span>{lang === 'zh' ? item.name : item.enName}</span>
+                                                        <span>{lang === 'zh' ? item.emotion : item.enEmotion}</span>
+                                                    </div>
+                                                    <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden relative" title={`${item.value} (${Math.round((item.value / TOTAL_VALUE) * 100)}%)`}>
+                                                        <div className="h-full rounded-full transition-all duration-700 hover:opacity-80 cursor-help" style={{ width: `${(item.value / 120) * 100}%`, backgroundColor: item.color }}></div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden p-8">
+                                    <div className="flex items-center gap-2 mb-6 border-b pb-4"><span className="text-2xl">🧠</span><h3 className="font-bold text-gray-800">{T['emotion.ai_title'][lang]}</h3></div>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                                        <select className="p-3 rounded-xl border" value={sY} onChange={e => setSY(e.target.value)}><option value="">{T['emotion.select_year'][lang]}</option>{listYears.map(y => <option key={y} value={y}>{y}</option>)}</select>
+                                        <select className="p-3 rounded-xl border" value={sL} onChange={e => setSL(e.target.value)} disabled={!sY}><option value="">{T['emotion.select_loc'][lang]}</option>{listLocs.map(l => <option key={l} value={l}>{l}</option>)}</select>
+                                        <select className="p-3 rounded-xl border" value={sM} onChange={e => setSM(e.target.value)} disabled={!sL}><option value="">{T['emotion.select_mood'][lang]}</option>{listMoods.map(m => <option key={m} value={m}>{m}</option>)}</select>
+                                        <select className="p-3 rounded-xl border" value={sT} onChange={e => setST(e.target.value)} disabled={!sM}><option value="">{T['emotion.select_poem'][lang]}</option>{listTitles.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                                    </div>
+                                    <button onClick={handleAnalyze} disabled={!sT || aiLoading} className="w-full py-4 bg-gradient-to-r from-blue-800 to-blue-600 text-white font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50">{aiLoading ? T['emotion.analyzing'][lang] : T['emotion.btn_analyze'][lang]}</button>
+                                    {aiRes && <div className="mt-8 p-8 bg-[#fdfbf7] rounded-xl border border-stone-200 whitespace-pre-wrap leading-loose font-serif">{aiRes}</div>}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const DrinkPage = ({ onBack, lang }) => {
+            const [mood, setMood] = useState("豪情万丈");
+            const [zoom, setZoom] = useState(false);
+            const data = DRINK_DATA[mood];
+
+            return (
+                <div className="min-h-screen bg-paper-texture font-serif animate-fade-in flex flex-col">
+                    {zoom && <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center cursor-zoom-out p-6" onClick={() => setZoom(false)}><img src={data.img} className="max-w-full max-h-full rounded shadow-2xl animate-slowZoom" alt="Scene" /></div>}
+                    <div className="fixed top-0 w-full bg-white/80 backdrop-blur z-20 px-6 py-4 flex justify-between border-b border-gray-200">
+                        <h2 className="text-xl font-bold">{T['drink.title'][lang]}</h2>
+                        <button onClick={onBack} className="px-4 border rounded-full hover:bg-gray-50">{T['drink.back'][lang]}</button>
+                    </div>
+                    <div className="flex-1 pt-24 pb-12 px-6 flex flex-col md:flex-row gap-8 max-w-6xl mx-auto w-full">
+                        <div className="w-full md:w-1/3 space-y-3">
+                            <h3 className="font-bold text-gray-500 mb-4">{T['drink.prompt'][lang]}</h3>
+                            {Object.keys(DRINK_DATA).map(k => (
+                                <button key={k} onClick={() => setMood(k)} className={`w-full p-4 rounded-xl border text-left flex justify-between transition-all ${mood === k ? 'bg-gray-900 text-white shadow-lg scale-105' : 'bg-white hover:bg-gray-50'}`}>
+                                    <span className="font-bold">
+                                        {lang === 'zh' ? k : MOOD_TRANSLATIONS[k]}
+                                    </span>
+                                    {mood === k && '🍶'}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="w-full md:w-2/3 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden flex flex-col">
+                            <div className="h-80 md:h-96 overflow-hidden cursor-zoom-in relative group" onClick={() => setZoom(true)}>
+                                <img src={data.img} className="w-full h-full object-cover transition-transform duration-[3s] group-hover:scale-110" alt="Mood" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-8">
+                                    <h2 className="text-white text-4xl font-bold tracking-widest">{lang === 'zh' ? mood : MOOD_TRANSLATIONS[mood]}</h2>
+                                </div>
+                            </div>
+                            <div className="flex-1 p-10 flex flex-col items-center justify-center text-center bg-[#fffdfa]">
+                                <h3 className="text-3xl font-calligraphy mb-4 leading-relaxed">{data.poem}</h3>
+                                <p className="text-sm text-gray-400 uppercase tracking-widest mt-4 border-t pt-4">—— {data.desc}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const BaseMap = ({ onL }) => {
+            const r = useRef(null);
+            useEffect(() => {
+                if (!r.current && window.L) {
+                    const m = window.L.map('b-m', { center: [33, 110], zoom: 5, zoomControl: false });
+                    window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(m);
+                    r.current = m;
+                    if (onL) onL(m);
+                }
+            }, [onL]);
+            return <div id="b-m" className="w-full h-full" />;
+        };
+
+// === 新增组件：网络关系页 (星形结构 + 真实数据) ===
+        const NetworkPage = ({ onBack, lang }) => {
+            const networkRef = useRef(null);
+            const [reportHtml, setReportHtml] = useState("");
+
+            // 初始化 Vis.js
+            useEffect(() => {
+                if (networkRef.current && window.vis) {
+
+                    // 1. 定义颜色映射
+                    const groupColors = {
+                        0: '#95a5a6', // 其他/亲属 (灰)
+                        1: '#3498db', // 文学山水 (蓝)
+                        2: '#e67e22', // 政治得意 (橙)
+                        3: '#2c3e50'  // 政治贬谪 (深蓝)
+                    };
+
+                    // 2. 处理节点 (Nodes) - 核心修改在这里！
+                    const processedNodes = REAL_NODES_DATA.map(n => {
+                        // 🟢 这里的逻辑负责让圆圈里的名字变英文
+                        let displayName = n.label;
+                        if (typeof n.label === 'object') {
+                            displayName = lang === 'zh' ? n.label.zh : n.label.en;
+                        }
+
+                        // === 特殊处理李白 (ID 32540) ===
+                        if (n.id === 32540) {
+                            return {
+                                id: n.id,
+                                label: displayName,
+                                size: 60,
+                                color: { background: '#ef4444', border: '#ef4444' },
+                                font: { size: 30, color: '#000000', face: 'Inter', strokeWidth: 0, bold: true },
+                                shadow: true,
+                                fixed: true
+                            };
+                        }
+
+                        // === 其他人物 ===
+                        return {
+                            id: n.id,
+                            label: displayName,
+                            size: Math.max(15, n.weight * 1.5),
+                            color: groupColors[n.group] || '#95a5a6',
+                            font: { size: 14, color: '#333', face: 'Inter' }
+                        };
+                    });
+
+                    // 3. 处理连线 (Edges)
+                    const processedEdges = REAL_NODES_DATA
+                        .filter(n => n.id !== 32540)
+                        .map(n => ({
+                            from: 32540,
+                            to: n.id,
+                            width: 1,
+                            color: { color: '#e5e7eb', opacity: 0.5 }
+                        }));
+
+                    const data = { nodes: new vis.DataSet(processedNodes), edges: new vis.DataSet(processedEdges) };
+
+                    const options = {
+                        nodes: { shape: "dot", borderWidth: 0, shadow: true },
+                        edges: { smooth: { type: "continuous" } },
+                        physics: {
+                            forceAtlas2Based: {
+                                gravitationalConstant: -80,
+                                centralGravity: 0.005,
+                                springLength: 200,
+                                springConstant: 0.05
+                            },
+                            maxVelocity: 50,
+                            solver: "forceAtlas2Based",
+                            timestep: 0.35,
+                            stabilization: { iterations: 150 }
+                        },
+                        interaction: { hover: true, tooltipDelay: 200 }
+                    };
+
+                    const net = new vis.Network(networkRef.current, data, options);
+
+                    // 点击事件：生成 AI 报告
+                    net.on("click", (params) => {
+                        if (params.nodes.length > 0) {
+                            const nodeId = params.nodes[0];
+                            const node = data.nodes.get(nodeId);
+                            if (node.id !== 32540) generateReport(node.label);
+                        }
+                    });
+                }
+
+                // 🔥 关键点：这里加了 [lang]，切换语言时会自动刷新名字
+            }, [lang]);
+
+            // ✅✅✅ AI 报告生成逻辑 (中英双语版) ✅✅✅
+            const generateReport = async (name) => {
+                // 1. 根据语言显示加载动画
+                const loadingText = lang === 'zh'
+                    ? `DeepSeek 正在深度挖掘...\n分析李白与【${name}】的时空情感关联`
+                    : `DeepSeek is analyzing...\nExploring the bond between Li Bai and [${name}]`;
+
+                setReportHtml(`
+                    <div class="flex flex-col items-center justify-center h-64 text-blue-600 space-y-4">
+                        <span class="text-4xl animate-spin">🌏</span>
+                        <div class="text-center whitespace-pre-wrap">
+                            <p class="font-bold text-lg">${loadingText}</p>
+                        </div>
+                    </div>
+                `);
+
+                if (!DEEPSEEK_API_KEY) {
+                    setTimeout(() => setReportHtml(`<div class="p-6 text-red-500 bg-red-50 rounded-xl border border-red-100">${lang === 'zh' ? '错误：API Key 未配置' : 'Error: API Key missing'}</div>`), 1000);
+                    return;
+                }
+
+                // 2. 定义双语提示词 (Prompt)
+                let systemPrompt = "";
+                let userPrompt = "";
+
+                if (lang === 'zh') {
+                    // --- 中文模式 ---
+                    systemPrompt = `你是一位精通《李白全集》、唐代历史地理（GIS）及文学情感分析（NLP）的专家。
+                    【核心任务】：生成一份关于“李白与特定人物”的深度关联报告。
+                    【重要原则】：
+                    1. 优先史实，若史料少可进行合理的学术推断。
+                    2. 输出必须是严格的 HTML 格式，使用 Tailwind CSS 类名美化。`;
+
+                    userPrompt = `
+                    请分析李白与【${name}】的关联。请严格按照以下框架输出 HTML（不要代码块）：
+                    <div class="space-y-6 font-serif">
+                        <div class="border-b border-gray-100 pb-4">
+                            <h3 class="text-2xl font-bold text-gray-900 mb-2">李白与${name}关联报告</h3>
+                            <div class="text-sm text-gray-500">基于《李白全集》及历史文献挖掘</div>
+                        </div>
+                        <div class="bg-blue-50 p-5 rounded-2xl border border-blue-100 shadow-sm">
+                            <h4 class="font-bold text-blue-800 mb-3 flex items-center text-lg"><span class="mr-2">📍</span> 1. 【GIS空间定位】</h4>
+                            <p class="text-sm text-gray-700 leading-relaxed text-justify">（指出两人互动的具体物理地点或活动区域。）</p>
+                        </div>
+                        <div class="bg-rose-50 p-5 rounded-2xl border border-rose-100 shadow-sm">
+                            <h4 class="font-bold text-rose-800 mb-3 flex items-center text-lg"><span class="mr-2">💡</span> 2. 【NLP情感关键词】</h4>
+                            <div class="flex flex-wrap gap-2 mb-3">
+                                <span class="px-3 py-1 bg-white border border-rose-200 rounded-full text-xs text-rose-600 font-bold shadow-sm">关键词1</span>
+                                <span class="px-3 py-1 bg-white border border-rose-200 rounded-full text-xs text-rose-600 font-bold shadow-sm">关键词2</span>
+                            </div>
+                            <p class="text-sm text-gray-700 leading-relaxed text-justify">（简述提取原因及李白心境。）</p>
+                        </div>
+                        <div class="bg-indigo-50 p-5 rounded-2xl border border-indigo-100 shadow-sm">
+                            <h4 class="font-bold text-indigo-800 mb-3 flex items-center text-lg"><span class="mr-2">🌊</span> 3. 【意象沉淀】</h4>
+                            <p class="text-sm text-gray-700 leading-relaxed text-justify">（分析关系中的心理符号，如流水、明月等。）</p>
+                        </div>
+                        <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-sm">
+                            <h4 class="font-bold text-slate-800 mb-3 flex items-center text-lg"><span class="mr-2">📜</span> 4. 【引用诗句】</h4>
+                            <div class="relative">
+                                <p class="italic text-gray-600 text-center font-calligraphy text-lg px-6 py-2">（引用一句最相关的原诗。）</p>
+                            </div>
+                        </div>
+                    </div>`;
+
+                } else {
+                    // --- 英文模式 ---
+                    systemPrompt = `You are an expert on Li Bai, Tang Dynasty history, and literature.
+                    Task: Generate a deep connection report between Li Bai and a specific person.
+                    Rules:
+                    1. Use historical facts or reasonable inferences.
+                    2. Output STRICT HTML with Tailwind CSS.
+                    3. **LANGUAGE RULE**: All analysis and titles MUST be in **ENGLISH**. However, **Poem Lines MUST remain in ORIGINAL CHINESE** to preserve beauty.`;
+
+                    userPrompt = `
+                    Analyze the connection between Li Bai and [${name}]. Strictly output HTML (no markdown):
+                    <div class="space-y-6 font-serif">
+                        <div class="border-b border-gray-100 pb-4">
+                            <h3 class="text-2xl font-bold text-gray-900 mb-2">Report: Li Bai & ${name}</h3>
+                            <div class="text-sm text-gray-500">Based on historical texts & data mining</div>
+                        </div>
+                        <div class="bg-blue-50 p-5 rounded-2xl border border-blue-100 shadow-sm">
+                            <h4 class="font-bold text-blue-800 mb-3 flex items-center text-lg"><span class="mr-2">📍</span> 1. GIS Spatial Location</h4>
+                            <p class="text-sm text-gray-700 leading-relaxed text-justify">
+                                (Explain where they met or interacted in English. E.g., Chang'an, Yellow Crane Tower.)
+                            </p>
+                        </div>
+                        <div class="bg-rose-50 p-5 rounded-2xl border border-rose-100 shadow-sm">
+                            <h4 class="font-bold text-rose-800 mb-3 flex items-center text-lg"><span class="mr-2">💡</span> 2. NLP Emotional Keywords</h4>
+                            <div class="flex flex-wrap gap-2 mb-3">
+                                <span class="px-3 py-1 bg-white border border-rose-200 rounded-full text-xs text-rose-600 font-bold shadow-sm">Keyword 1 (English)</span>
+                                <span class="px-3 py-1 bg-white border border-rose-200 rounded-full text-xs text-rose-600 font-bold shadow-sm">Keyword 2 (English)</span>
+                            </div>
+                            <p class="text-sm text-gray-700 leading-relaxed text-justify">
+                                (Analyze the sentiment and Li Bai's mood in English.)
+                            </p>
+                        </div>
+                        <div class="bg-indigo-50 p-5 rounded-2xl border border-indigo-100 shadow-sm">
+                            <h4 class="font-bold text-indigo-800 mb-3 flex items-center text-lg"><span class="mr-2">🌊</span> 3. Imagery Sedimentation</h4>
+                            <p class="text-sm text-gray-700 leading-relaxed text-justify">
+                                (Analyze psychological symbols like Moon/Water/Pine in English.)
+                            </p>
+                        </div>
+                        <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-sm">
+                            <h4 class="font-bold text-slate-800 mb-3 flex items-center text-lg"><span class="mr-2">📜</span> 4. Related Poem</h4>
+                            <div class="relative">
+                                <p class="italic text-gray-600 text-center font-calligraphy text-lg px-6 py-2">
+                                    (Please quote the most relevant **Chinese Poem Line** here. KEEP IT IN CHINESE.)
+                                </p>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+
+                // 3. 调用 API
+                try {
+                    const res = await fetch("https://api.deepseek.com/chat/completions", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${DEEPSEEK_API_KEY}`
+                        },
+                        body: JSON.stringify({
+                            model: "deepseek-chat",
+                            messages: [
+                                { role: "system", content: systemPrompt },
+                                { role: "user", content: userPrompt }
+                            ],
+                            temperature: 0.7,
+                            max_tokens: 1500
+                        })
+                    });
+
+                    const d = await res.json();
+
+                    if (d.error) {
+                        console.error("DeepSeek API Error:", d.error);
+                        setReportHtml(`<div class="p-6 text-red-600 bg-red-50 rounded-xl">API Error: ${d.error.message}</div>`);
+                    } else {
+                        let rawHtml = d.choices[0].message.content;
+                        rawHtml = rawHtml.replace(/```html/g, "").replace(/```/g, "").trim();
+                        setReportHtml(rawHtml);
+                    }
+
+                } catch (e) {
+                    console.error("Network Error:", e);
+                    setReportHtml(`<div class="p-6 text-red-600 bg-red-50 rounded-xl">Network Error: ${e.message}</div>`);
+                }
+            };
+
+            return (
+                <div className="fixed inset-0 z-50 bg-[#f8fafc] flex flex-col font-sans animate-fade-in">
+                    {/* 顶部导航栏 */}
+                    <div className="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center shadow-sm z-20">
+                        <h2 className="text-xl font-bold text-gray-800 tracking-wider">🔗 {T['nav.network'][lang]}</h2>
+                        <button onClick={onBack} className="px-5 py-2 rounded-full bg-white border border-gray-300 text-sm hover:bg-gray-50 transition-colors font-medium text-gray-600">
+                            ✕ {T['emotion.exit'][lang]}
+                        </button>
+                    </div>
+
+                    <div className="flex-1 p-6 md:p-8 overflow-hidden flex flex-col md:flex-row gap-6 max-w-7xl mx-auto w-full">
+
+                        {/* 左侧：图谱卡片 */}
+                        <div className="flex-1 bg-white rounded-2xl shadow-xl border border-gray-100 flex flex-col relative overflow-hidden">
+                            {/* 图例 - 这里的文字已经改成了中英双语 */}
+                            <div className="absolute top-4 left-4 right-4 z-10 flex flex-col md:flex-row justify-between items-start md:items-center bg-white/90 backdrop-blur p-3 rounded-xl border border-gray-100 shadow-sm">
+                                <div className="text-sm font-bold text-gray-500 mb-2 md:mb-0">
+                                    {lang === 'zh' ? '🕸️ CBDB 人物社会网络' : '🕸️ CBDB Social Network'}
+                                </div>
+                                <div className="flex gap-3 text-xs flex-wrap">
+                                    <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-[#ef4444]"></span> {lang === 'zh' ? '李白(本我)' : 'Li Bai (Self)'}</div>
+                                    <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-[#3498db]"></span> {lang === 'zh' ? '文学山水' : 'Literature & Nature'}</div>
+                                    <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-[#e67e22]"></span> {lang === 'zh' ? '政治得意' : 'Political Success'}</div>
+                                    <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-[#2c3e50]"></span> {lang === 'zh' ? '政治贬谪' : 'Exile & Setbacks'}</div>
+                                    <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-[#95a5a6]"></span> {lang === 'zh' ? '其他/亲眷' : 'Others/Family'}</div>
+                                </div>
+                            </div>
+                            <div ref={networkRef} className="w-full h-full bg-gradient-to-b from-white to-slate-50"></div>
+                        </div>
+
+                        {/* 右侧：AI 报告卡片 */}
+                        <div className="w-full md:w-96 bg-white rounded-2xl shadow-xl border border-gray-100 flex flex-col overflow-hidden">
+                            <div className="p-5 border-b border-gray-100">
+                                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                                    📄 {lang === 'zh' ? 'AI 深度分析报告' : 'AI Deep Analysis Report'}
+                                </h3>
+                            </div>
+                            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
+                                {reportHtml ? (
+                                    <div className="animate-fade-in leading-relaxed text-gray-700" dangerouslySetInnerHTML={{ __html: reportHtml }} />
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-gray-400 text-center space-y-4">
+                                        <div className="text-4xl">👈</div>
+                                        <p className="text-sm">
+                                            {lang === 'zh' 
+                                                ? <>点击左侧图谱中的人物节点<br/>生成【GIS空间定位】与<br/>【NLP情感分析】报告</> 
+                                                : <>Click nodes in the graph to generate<br/>[GIS Location] & <br/>[NLP Analysis] Report</>}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const FootprintPage = ({ onBack, lang }) => {
+            const [m, sM] = useState(null);
+            const [p, sP] = useState(701);
+            const lRef = useRef({});
+
+            // Custom SVG Icon provided
+            const markerSvg = `
+            <svg class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="64" height="64" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));">
+                <path d="M949.1 501.1c0 35.4-4.2 69.8-12.1 102.8-5.7 23.9-13.6 47.2-23.1 69.4-0.5 1.2-0.9 2.3-1.5 3.3-4.3 9.8-9 19.4-14 28.9-45.2 85.4-117.9 154-206.2 194.1-1.3 0.6-2.6 1.2-4 1.8-53.6 23.6-113 36.8-175.2 36.8-118.9 0-226.7-47.7-305.4-125.2-6.5-6.4-12.7-12.9-18.8-19.6-0.7-0.8-1.5-1.6-2.1-2.4-41.9-47.5-73.7-104-92-166.5-11.4-39.1-17.6-80.5-17.6-123.4 0-27.5 2.5-54.4 7.4-80.4 12.2-65.7 39-126.2 77-178 28.5-39 63.4-73 103-100.6 56.8-39.6 123.6-66.1 195.9-74.8 4.8-0.6 9.6-1 14.4-1.5 12.6-1.2 25.5-1.7 38.5-1.7 80.8 0 156.6 22.1 221.4 60.4 50.7 30 94.8 70.1 129.6 117.3 22.4 30.4 40.9 63.8 54.9 99.5 2 5 3.9 10.2 5.7 15.4 15.7 45.2 24.2 93.8 24.2 144.4z" fill="#FFFFFF" opacity=".4"></path>
+                <path d="M893.8 495.6c0 31-3.6 61-10.6 89.8-5 20.9-11.8 41.2-20.1 60.6-0.5 1-0.8 2-1.3 2.9-3.7 8.6-7.8 17-12.2 25.2-39.4 74.6-102.9 134.5-180 169.5-1.1 0.5-2.3 1-3.5 1.6-46.8 20.6-98.6 32.1-153 32.1-103.8 0-197.9-41.6-266.6-109.3-5.6-5.6-11.1-11.2-16.4-17.1-0.6-0.7-1.3-1.4-1.8-2.1-36.6-41.5-64.4-90.9-80.3-145.4-10.1-34.2-15.5-70.4-15.5-107.8 0-24 2.2-47.5 6.5-70.2 10.7-57.3 34.1-110.2 67.2-155.4 24.9-34.1 55.4-63.7 89.9-87.8 49.6-34.6 107.9-57.7 171-65.3 4.2-0.5 8.4-0.9 12.6-1.3 11-1 22.2-1.5 33.6-1.5 70.6 0 136.7 19.3 193.3 52.8 44.3 26.2 82.8 61.2 113.1 102.5 19.6 26.6 35.7 55.7 47.9 86.9 1.7 4.4 3.4 8.9 5 13.4 13.7 39.2 21.2 81.7 21.2 125.9z" fill="#FFFFFF"></path>
+                <path d="M282.7 368.668c-3.9-1.5-8.6-0.1-11 3.5l-2.3 5.4-15.9 37.4-11 25.9-19.1 44.8 16.5 7 6.6-15.3 15.1-35.5c-2.7-0.9-4.9-2.9-6.2-5.4-1-2.1-1.4-4.4-0.7-6.9 1.1-4.8 5.5-8.1 10.2-8.1 0.8 0 1.6 0.1 2.4 0.3l2.6 0.6 6.6-15.4 9.7-22.8 2.2-5.2c0.9-4.2-1.5-8.6-5.7-10.3z" fill="#1F0D60"></path>
+                <path d="M240 492.768c-4.1 4.5-8.1 9-12.2 13.4-3.1 3.4-6.3 6.9-9.4 10.3 0.7-4.5 1.5-9 2.2-13.4 0.9-5.8 1.9-11.5 2.8-17.3 2.6-0.9 5-1.8 7.6-2.6 0.2 1.5 0.4 3.1 0.5 4.6 1.9-2.7 3.7-5.4 5.7-8.2 1 4.4 1.9 8.8 2.8 13.2z" fill="#D5E0EA"></path>
+                <path d="M288.3 379.068l-2.2 5.1-16.6-6.6 2.3-5.4c2.4-3.6 7-5.1 11-3.5 4.1 1.6 6.5 6 5.5 10.4z" fill="#F714FF"></path>
+                <path d="M286.1 385.368c-0.1 0-0.2 0-0.4-0.1l-16.6-6.7c-0.5-0.2-0.7-0.7-0.5-1.2 0.2-0.5 0.7-0.7 1.2-0.6l16.6 6.7c0.5 0.2 0.7 0.7 0.5 1.2-0.2 0.5-0.4 0.7-0.8 0.7zM284.6 389.068c-0.1 0-0.2 0-0.4-0.1l-16.6-6.7c-0.5-0.2-0.7-0.7-0.5-1.2 0.2-0.5 0.7-0.7 1.2-0.6l16.6 6.7c0.5 0.2 0.7 0.7 0.5 1.2 0 0.5-0.4 0.7-0.8 0.7z" fill="#D5E0EA"></path>
+                <path d="M227.8 506.268c-3.1 3.4-6.3 6.8-9.4 10.2 0.7-4.5 1.5-8.9 2.2-13.3l7.2 3.1z" fill="#1F0D60"></path>
+                <path d="M645.031 463.1c2-10.2 4-20.5 5.9-30.7-6.9 1.7-16.1 2.8-24-1.7-22.7-12.9-7.3-56.5-25.6-73.4-11.7-10.9-38.7-12.2-101.1 18.9-6.1 18.6-7.7 36.1-8.5 45.5-0.9 10.6-7.1 82.7 32.9 105.2 7.3 4.1 15.4 6.2 23.6 6.5-0.3 6.4-0.8 21-1.6 36.5-0.8 19.8-1.7 41-2.1 48.6 32.1-20.9 64.1-41.7 96.1-62.5 0-0.3 0-0.6 0.1-0.9 0.5-8.1 0.9-16 1.4-24.1 0.7-12.2 1.4-24.3 2.1-36.5 0.4-6.3 0.7-12.5 1.1-18.8 0-1.9-0.1-3.7-0.3-5.5v-0.5c0.1-0.6 0.2-1.2 0.3-1.7-0.1-1.8-0.2-3.4-0.3-4.9z" fill="#FFD2DC"></path>
+                <path d="M729.236 280.4c0.5-33.3-26.3-60.7-59.8-61.1-33.5-0.5-61.1 26.1-61.6 59.4-0.1 9.3 1.8 18.1 5.5 25.9-16.4-3.9-33.9-4.8-50.2-1.9-9.2 1.6-32.9 6.3-49.3 25.4-4.1 4.8-12.8 15.1-14.6 30.8-0.8 7.2 0 13.2 0.9 17.2 0.1 0 0.2-0.1 0.3-0.2 62.5-31.1 89.4-29.8 101.1-18.9 18.3 17 2.9 60.6 25.6 73.5 7.9 4.5 17.2 3.4 24 1.7-2 10.3-6.5 55.8-6.8 62-0.7 12.2-1.4 24.3-2.1 36.5 8.8-6.1 19.4-15 29-27.5 23.6-30.5 26.3-62.4 27.1-73.6 3.1-43.3-14.6-75.4-21.9-87.1-0.6-1-1.4-2-2.2-3 30.4-2.6 54.5-27.9 55-59.1zM548.231 533.9c-0.5 0-0.8-0.3-0.9-0.7-0.1-0.5 0.3-1 0.7-1 5.8-1 11.8-2.3 17.5-3.8 7.8-2.1 15.7-4.8 23.1-7.8 0.5-0.2 1 0 1.2 0.5s0 1-0.5 1.2c-7.6 3.2-15.4 5.9-23.3 7.9-5.7 1.5-11.8 2.8-17.7 3.8h-0.1v-0.1z"></path>
+                <path d="M672.63 423.17c-3-0.6-5.9-0.9-8.9-0.7-5.2 0.3-10.1 1.7-14.5 4.2-0.8 0.5-1.6 0.9-2.3 1.5-0.6 0.5-1.3 0.9-1.9 1.4-6.2 4.6-10.8 11.5-12.5 19.6-3.9 18.1 7.8 36 26 39.9 18.3 3.9 36.2-7.7 40.2-25.9 3.8-18.2-7.8-36.1-26.1-40z" fill="#FFD2DC"></path>
+                <path d="M651.33 468.47c-0.4 0-0.6-0.2-0.8-0.5-0.2-0.5-0.1-1 0.4-1.2 3-1.5 5-4.6 5.2-8 0.2-3.4-1.6-6.8-4.6-8.6-0.3-0.2-0.5-0.5-0.5-0.8 0-0.4 0.2-0.6 0.5-0.8l30.9-17.5c0.5-0.3 1-0.1 1.3 0.4 0.3 0.5 0.1 1-0.4 1.3l-29.6 16.9c2.8 2.3 4.5 5.8 4.2 9.4-0.2 4-2.7 7.7-6.2 9.5-0.1-0.2-0.2-0.1-0.4-0.1z"></path>
+                <path d="M651.231 475.2l-28.6 16.8 33.2 16.7z" fill="#00B7EA"></path>
+                <path d="M855.969 661.719c-3.7 8.6-7.9 17.2-12.4 25.6-18.3 34.2-41.7 65.3-69.6 92.5s-59.8 50-94.5 67.5c-0.9 0.5-1.3 1.5-0.8 2.4-4.7 2.4-9.3 4.5-14.1 6.7-1.1 0.5-2.3 1-3.5 1.5-47 20.5-99 31.9-153.5 31.9-63.2 0-122.8-15.2-175.3-42.2 0.5-0.9 0.1-2-0.7-2.4-33.1-17.2-63.4-39.1-90.1-65.2-5.7-5.4-11.2-11.2-16.6-17.2-0.1-0.2-0.3-0.3-0.4-0.5 34.1-92.2 68.2-184.3 102.2-276.5 22.1 7.2 44.3 14.3 66.4 21.6-0.7 23.5-1.7 47.1-2.8 71.2-2 41.3-4.6 81.9-7.6 121.6 4.1-6.3 64.1-94.7 164.3-130.6-0.8 19.8-1.7 41-2.1 48.6 32.1-20.9 64-41.7 96.1-62.5 0-0.3 0-0.6 0.1-0.9 106.6 3.8 183.5 75.2 214.9 106.9z" fill="#4A90E2"></path>
+                <path d="M544.669 618.819c-0.2 0-0.3 0-0.5-0.1-0.3-0.2-0.5-0.5-0.5-0.8l1.4-31.2c0-0.5 0.5-0.9 0.9-0.9 0.5 0 0.9 0.5 0.9 0.9l-1.3 29.5 86-55.8c0.5-0.3 1-0.2 1.3 0.3 0.3 0.5 0.2 1-0.3 1.3l-87.4 56.8c-0.1-0.1-0.3 0-0.5 0z" fill="#D5E0EA"></path>
+                <path d="M609.768 709.857v223.5c0 4.1-3.1 7.5-7.2 8-51.6 5.5-103.3 11.2-155 16.7-1.6 0.2-3.1-0.1-4.5-0.8-37.5-18.5-74.9-37.1-112.4-55.6-3-1.5-4.8-4.6-4.5-7.9 1.3-14.2 2.6-28.5 3.8-42.7 5-55.9 10.1-111.8 15.2-167.7 0.5-6.2 7.7-9.4 12.7-5.9 0.1 0 0.1 0.1 0.2 0.1 24.9 17.4 81.2 58.2 95.5 68.6 2.1 1.5 4.8 1.9 7.3 1.2l132.7-43.3 5.4-1.7c5.4-1.8 10.8 2.1 10.8 7.5z" fill="#1F0D60"></path>
+                <path d="M423.768 948.857c-0.5-0.1-0.9-0.5-0.9-1l21.9-207.4c0.1-0.5 0.5-0.8 1-0.8 0.5 0.1 0.8 0.5 0.8 1l-21.9 207.4c-0.1 0.4-0.5 0.8-0.9 0.8zM487.268 954.857c-0.5 0-0.9-0.4-0.9-0.9l-7.5-212.6c0-0.5 0.4-0.9 0.9-0.9 0.5-0.1 0.9 0.4 0.9 0.9l7.5 212.6c0 0.4-0.4 0.9-0.9 0.9z" fill="#D5E0EA"></path>
+                <path d="M593.768 704.157l-136.6 44.6s-70.3-50.9-98.9-71l19.6-7.9 79.6 63.5 115.8-44.8 20.5 15.6z" fill="#D5E0EA"></path>
+                <path d="M382.537 464.694c-11.7-24.5-32.5-43.3-36.7-47-9.9-8.8-19.2-14.9-26-19-2.8-2.9-7.4-4.1-11.6-2.6l-31.6 11-6.6 15.4-2.6-0.6c-0.8-0.2-1.6-0.3-2.4-0.3-4.8 0-9.1 3.3-10.2 8.1-0.1 0.4-0.1 0.6-0.2 1v0.2c0 0.3-0.1 0.5-0.1 0.7V432.894c0 0.2 0 0.4 0.1 0.5 0 0.2 0.1 0.3 0.1 0.5s0.1 0.3 0.1 0.4c0 0.2 0.1 0.4 0.1 0.5 0 0.1 0.1 0.2 0.1 0.3 0.1 0.2 0.1 0.5 0.2 0.6v0.1c1.1 2.8 3.5 5.2 6.5 6.2l-15.2 35.4c3.1 0.2 6.2-1 8.4-3.4l16-17.8-7.6 15.9c-2.5 5.2-0.2 11.4 5 13.9 5.2 2.4 11.5 0.2 14-5l6.3-13.4-2.7 8.3c-1.8 5.4 1.2 11.3 6.7 13.1 5.5 1.8 11.4-1.2 13.3-6.6l5.7-16.8c5 10.9 12.2 17.8 15.1 20.4 22.1 7.2 44.3 14.3 66.4 21.6-0.7-13.3-3.4-28-10.6-42.9z" fill="#FFD2DC"></path>
+                <path d="M346.637 454.694c-0.2 0-0.5-0.1-0.6-0.3-10-9.2-21.3-16.5-33.6-21.8-14.3-6.2-29.4-9.6-45.1-10.1-0.5 0-0.9-0.5-0.9-0.9 0-0.5 0.5-0.9 0.9-0.9 15.9 0.5 31.3 3.9 45.8 10.1 12.5 5.4 24 12.9 34.2 22.2 0.4 0.4 0.4 0.9 0.1 1.3-0.3 0.3-0.5 0.4-0.8 0.4zM288.737 468.294c-0.1 0-0.3 0-0.4-0.1-0.5-0.2-0.6-0.7-0.5-1.2l6.5-13.6c0.2-0.5 0.7-0.6 1.2-0.5 0.5 0.2 0.6 0.7 0.5 1.2l-6.5 13.6c-0.1 0.5-0.4 0.6-0.8 0.6z"></path>
+                <path d="M229.837 423.094l23.8-8.3-11.1 26-5.6 1.9c-5.7 1.9-11.9-0.8-13.8-6.3-2-5.3 1.1-11.3 6.7-13.3z" fill="#FFD2DC"></path>
+                <path d="M687.683 838.994c-0.1 0.5-0.7 4.1-1.9 7-5.2 12.7-48.7 27.7-67.3 31.8-11.8 2.6-27.6 5.7-46.5 8-5.7 1.2-11.2-2.4-12.4-8.1-0.2-0.7-0.2-1.5-0.2-2.2 0-0.8 0.1-1.5 0.3-2.3-5.1 0.4-10-3.1-11-8.2-1.2-5.6 2.5-11.2 8.1-12.3l9.6-2-15.4 2.3c-0.5 0.1-1 0.1-1.6 0.1-5.1 0-9.6-3.7-10.4-8.9-0.9-5.7 3.1-11.1 8.8-11.9l62-9.2v-10.8h-57.1c-5.8 0-10.5-4.7-10.5-10.4s4.8-10.4 10.5-10.4h57.1v-24.4c11.2 0.5 26.5 2.8 42.1 11.7 19.8 11.3 31.5 29.1 34.7 40.8 2.7 10.3 1.1 19.4 1.1 19.4z" fill="#FFD2DC"></path>
+                <path d="M556.483 853.494c-0.5 0-0.8-0.3-0.9-0.7s0.3-1 0.7-1.1l56.2-10.5c0.5-0.1 1 0.3 1.1 0.7s-0.3 1-0.7 1.1l-56.2 10.5h-0.2zM559.383 874.194c-0.5 0-0.8-0.3-0.9-0.7-0.1-0.5 0.2-1 0.6-1.1l58.3-13.9c0.5-0.1 1 0.2 1.1 0.6s-0.2 1-0.6 1.1l-58.3 13.9c0 0.1-0.1 0.1-0.2 0.1zM639.483 792.394h-30c-0.5 0-0.9-0.4-0.9-0.9s0.4-0.9 0.9-0.9h30c0.5 0 0.9 0.4 0.9 0.9s-0.3 0.9-0.9 0.9z"></path>
+            </svg>`;
+
+            useEffect(() => {
+                if (m && window.L) {
+                    const L = window.L;
+                    if (lRef.current.group) lRef.current.group.clearLayers();
+                    const group = L.featureGroup().addTo(m);
+                    lRef.current.group = group;
+
+                    const curPoints = JOURNEY_DATA.filter(d => d.y <= p);
+                    if (curPoints.length === 0) return;
+
+                    // 1. Dotted line
+                    L.polyline(curPoints.map(c => [c.lat, c.lng]), { color: '#2563eb', weight: 3, dashArray: '10,10' }).addTo(group);
+
+                    // 2. History points
+                    curPoints.forEach(pt => L.circleMarker([pt.lat, pt.lng], { radius: 5, color: '#ffffff', weight: 1, fillColor: '#1e40af', fillOpacity: 1 }).addTo(group));
+
+                    // 3. Current point
+                    const cur = curPoints[curPoints.length - 1];
+                    L.marker([cur.lat, cur.lng], {
+                        icon: L.divIcon({
+                            html: markerSvg,
+                            className: 'bg-transparent',
+                            iconAnchor: [32, 32], // Center of 64x64
+                            popupAnchor: [0, -32]
+                        })
+                    })
+                        .addTo(group)
+                        .bindTooltip(`${cur.y} - ${cur.n}`, { permanent: true, direction: 'top', offset: [0, -40], className: 'font-bold text-blue-600 bg-white/90 border-0 shadow-sm px-2 py-1 rounded' })
+                        .openTooltip();
+                }
+            }, [m, p]);
+
+            return (
+                <div className="fixed inset-0 z-50 bg-white flex flex-col">
+                    <div className="absolute top-0 z-20 w-full p-4 flex justify-between pointer-events-none">
+                        <div className="bg-white/90 p-3 rounded-xl pointer-events-auto shadow-sm border border-gray-100">
+                            <h2 className="font-bold">{T['footprint.title'][lang]}</h2>
+                        </div>
+                        <button onClick={onBack} className="bg-white px-4 py-2 rounded-full shadow pointer-events-auto border">✕ {T['emotion.exit'][lang]}</button>
+                    </div>
+                    <div className="flex-1 bg-blue-50/30"><BaseMap onL={sM} /></div>
+                    <div className="bg-white p-8 border-t">
+                        <div className="max-w-4xl mx-auto">
+                            <div className="flex justify-between text-sm text-gray-500 mb-2 font-mono font-bold">
+                                <span>701 ({T['footprint.birth'][lang]})</span>
+                                <span>724 ({T['footprint.out'][lang]})</span>
+                                <span>742 ({T['footprint.capital'][lang]})</span>
+                                <span>755 ({T['footprint.war'][lang]})</span>
+                                <span>762 ({T['footprint.death'][lang]})</span>
+                            </div>
+                            <input type="range" min="701" max="762" value={p} onChange={e => sP(+e.target.value)} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                            <div className="text-center mt-2 text-blue-600 font-bold">{p}</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const LifePage = ({ onBack, lang }) => {
+            return (
+                <div className="min-h-screen bg-stone-50 text-gray-800 font-serif animate-fade-in">
+                    <div className="fixed top-0 left-0 w-full bg-stone-50/90 backdrop-blur-md border-b border-stone-200 z-20 px-6 py-4 flex justify-between items-center">
+                        <h2 className="text-2xl font-bold text-gray-900 tracking-widest">{T['life.title'][lang]}</h2>
+                        <button onClick={onBack} className="px-4 py-2 rounded-full bg-white border border-gray-300 text-sm hover:bg-gray-100 transition-colors">✕ {T['life.back'][lang]}</button>
+                    </div>
+                    <div className="max-w-4xl mx-auto pt-24 pb-20 px-6">
+                        <div className="relative border-l-2 border-stone-300 ml-6 md:ml-12 space-y-16">
+                            {LIFE_EVENTS.map((e, i) => (
+                                <div key={i} className="relative pl-8 md:pl-16 group">
+                                    <div className="absolute -left-[9px] top-0 w-5 h-5 rounded-full bg-stone-100 border-4 border-gray-400 group-hover:border-blue-600 group-hover:scale-125 transition-all duration-300"></div>
+                                    <div className="absolute -left-16 md:-left-24 top-0 text-right w-12 md:w-20">
+                                        <span className="text-lg md:text-xl font-bold text-gray-400 group-hover:text-blue-600 transition-colors font-sans">{e.y}</span>
+                                    </div>
+                                    <div className="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-stone-200 hover:shadow-lg transition-shadow duration-300">
+                                        <h3 className="text-2xl font-bold mb-3 text-gray-900">{lang === 'zh' ? e.t.zh : e.t.en}</h3>
+                                        <p className="text-lg text-gray-600 leading-relaxed">{lang === 'zh' ? e.d.zh : e.d.en}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const ResultPage = ({ type, data, onBack, lang }) => {
+            if (type === 'three_ages') {
+                let parts = data.split('|||');
+                if (parts.length < 3) {
+                    const fallbackText = "（...）";
+                    parts = [data, fallbackText, fallbackText];
+                }
+                const cards = [
+                    { title: lang === 'zh' ? "青年期" : "Youth", age: lang === 'zh' ? "二十岁 · 仗剑去国" : "Age 20 · Wandering", text: parts[0], theme: "text-teal-800", bg: "bg-teal-50/80", border: "border-teal-800", char: "狂", delay: "0s" },
+                    { title: lang === 'zh' ? "中年期" : "Mid-Age", age: lang === 'zh' ? "四十岁 · 供奉翰林" : "Age 40 · Imperial Scholar", text: parts[1], theme: "text-amber-800", bg: "bg-amber-50/80", border: "border-amber-800", char: "傲", delay: "0.2s" },
+                    { title: lang === 'zh' ? "老年期" : "Old Age", age: lang === 'zh' ? "六十岁 · 临终绝笔" : "Age 60 · Final Verse", text: parts[2], theme: "text-slate-800", bg: "bg-slate-50/80", border: "border-slate-800", char: "仙", delay: "0.4s" }
+                ];
+                return (
+                    <div className="min-h-screen bg-paper-texture py-12 px-4 md:px-8 relative overflow-hidden font-serif">
+                        <div className="max-w-7xl mx-auto mb-16 flex justify-between items-center relative z-10 animate-fade-up">
+                            <div>
+                                <div className="text-sm text-gray-500 mb-2 uppercase tracking-widest font-sans">Time Travel Q&A</div>
+                                <h2 className="text-3xl md:text-4xl font-bold text-gray-900">{lang === 'zh' ? "三时期的回应" : "Response from Three Ages"}</h2>
+                            </div>
+                            <button onClick={onBack} className="group px-6 py-2 rounded-full bg-white border border-gray-200 shadow-sm hover:shadow-md transition-all flex items-center gap-2">
+                                <span className="text-gray-500 group-hover:text-gray-900">✕</span>
+                                <span className="font-sans text-sm text-gray-600 group-hover:text-gray-900">{T['drink.back'][lang]}</span>
+                            </button>
+                        </div>
+                        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10 pb-20">
+                            {cards.map((card, index) => (
+                                <div key={index} className={`relative group ink-shadow rounded-xl overflow-hidden animate-fade-up`} style={{ animationDelay: card.delay }}>
+                                    <div className={`absolute -right-4 -bottom-8 text-[10rem] font-calligraphy opacity-5 select-none transition-transform group-hover:scale-110 duration-700 ${card.theme}`}>{card.char}</div>
+                                    <div className={`h-full flex flex-col ${card.bg} border-t-4 ${card.border} p-8 transition-colors duration-500`}>
+                                        <div className="border-b border-gray-200/50 pb-6 mb-6 flex justify-between items-start"><div className="writing-vertical h-24 text-2xl font-bold font-calligraphy tracking-widest opacity-80">{card.title}</div><div className="text-right"><div className="text-xs uppercase tracking-widest opacity-50 font-sans mb-1">Age Period</div><div className="text-sm font-bold opacity-80">{card.age}</div></div></div>
+                                        <div className="flex-1"><p className="text-lg leading-loose text-gray-800 text-justify relative"><span className="text-4xl float-left mr-2 mt-[-10px] font-calligraphy opacity-30">“</span>{card.text}</p></div>
+                                        <div className="mt-8 pt-4 border-t border-gray-200/30 flex items-center justify-between opacity-40 text-xs"><span>Tang Dynasty</span><div className="h-px w-12 bg-current"></div></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            }
+            return (
+                <div className="min-h-screen bg-paper-texture flex items-center justify-center p-4 font-serif">
+                    <div className="bg-white p-10 rounded-2xl shadow-xl max-w-3xl w-full relative border border-gray-100 animate-fade-up">
+                        <button onClick={onBack} className="absolute top-6 right-6 text-gray-400 hover:text-black">✕</button>
+                        <div className="flex gap-4 mb-6 border-b pb-4"><div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden"><img src="https://picx.zhimg.com/80/v2-7228406e00cce3ede863a49268a98993_720w.webp?source=2c26e567" className="w-full h-full object-cover" alt="Li Bai" /></div><div><h2 className="text-xl font-bold">{T['search.btn'][lang]}</h2><p className="text-xs text-gray-500">AI Assistant</p></div></div>
+                        <div className="prose max-w-none leading-loose whitespace-pre-wrap text-gray-700">{data}</div>
+                    </div>
+                </div>
+            );
+        };
+
+        const AboutPage = ({ onBack, lang }) => {
+            return (
+                <div className="min-h-screen bg-stone-50 font-sans animate-fade-in flex flex-col text-gray-900">
+                    <div className="fixed top-0 left-0 w-full bg-white/90 backdrop-blur-md border-b border-gray-200 z-50 px-6 py-4 flex justify-between items-center shadow-sm">
+                        <h2 className="text-xl md:text-2xl font-bold tracking-wider">{T['about.title'][lang]}</h2>
+                        <button onClick={onBack} className="px-5 py-2 rounded-full bg-gray-100 border border-gray-300 text-sm hover:bg-gray-200 transition-colors font-medium">
+                            ✕ {T['drink.back'][lang]}
+                        </button>
+                    </div>
+
+                    <div className="flex-1 pt-24 pb-20 px-6 overflow-y-auto custom-scrollbar">
+                        <div className="max-w-6xl mx-auto space-y-20">
+
+                            <section className="animate-fade-up">
+                                <div className="mb-12">
+                                    <h3 className="text-3xl font-bold mb-2">{T['about.team'][lang]}</h3>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-12">
+                                    {TEAM_MEMBERS.map((member, index) => (
+                                        <div key={index} className="flex flex-col text-left group">
+                                            <div className="w-full aspect-square mb-4 overflow-hidden rounded-md bg-gray-100">
+                                                <img src={member.avatar} alt={lang === 'zh' ? member.name.zh : member.name.en} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                                            </div>
+                                            <h4 className="text-lg font-bold text-blue-600 mb-1">{lang === 'zh' ? member.name.zh : member.name.en}</h4>
+                                            <p className="text-sm text-gray-800 mb-3 leading-tight">{lang === 'zh' ? member.title.zh : member.title.en}</p>
+
+                                            <div className="text-xs text-gray-500 space-y-1 font-mono">
+
+{/* 1. 邮箱：点击自动发邮件 */}
+<a
+    href={`mailto:${member.email}`}
+    className="block break-all hover:text-gray-900 cursor-pointer transition-colors"
+>
+    {member.email}
+</a>
+
+{/* 2. 领英：点击跳转新网页 */}
+<a
+    href={`https://${member.linkedin}`}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="block break-all hover:text-blue-600 cursor-pointer transition-colors"
+>
+    {member.linkedin}
+</a>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+{/* --- 1. 原有的：研究问题 (Research Questions) --- */}
+                            <section className="animate-fade-up" style={{ animationDelay: '0.1s' }}>
+                                <div className="bg-white p-8 md:p-10 rounded-2xl shadow-sm border border-gray-100 w-full">
+                                    <h3 className="text-2xl font-bold mb-6 text-gray-900">{T['about.research'][lang]}</h3>
+                                    <p className="leading-loose text-lg text-gray-700 text-justify">
+                                        {lang === 'zh' ? RESEARCH_OVERVIEW.zh : RESEARCH_OVERVIEW.en}
+                                    </p>
+                                </div>
+                            </section>
+
+                            {/* --- 2. 新增：研究结果 (Research Findings) --- */}
+                            <section className="animate-fade-up" style={{ animationDelay: '0.15s' }}>
+                                <div className="bg-white p-8 md:p-10 rounded-2xl shadow-sm border border-gray-100 w-full mt-8">
+                                    <h3 className="text-2xl font-bold mb-6 text-gray-900">{T['about.findings'][lang]}</h3>
+                                    <p className="leading-loose text-lg text-gray-700 text-justify">
+                                        {lang === 'zh' ? RESEARCH_FINDINGS.zh : RESEARCH_FINDINGS.en}
+                                    </p>
+                                </div>
+                            </section>
+
+{/* --- 3. 新增：数据来源 (Data Sources) - 已更新样式和内容 --- */}
+                            <section className="animate-fade-up" style={{ animationDelay: '0.2s' }}>
+                                {/* 下面这一行 div 的 class 就是控制白底圆角样式的，和上面的研究结果保持一致 */}
+                                <div className="bg-white p-8 md:p-10 rounded-2xl shadow-sm border border-gray-100 w-full mt-8">
+                                    <h3 className="text-2xl font-bold mb-6 text-gray-900">{T['about.sources'][lang]}</h3>
+
+                                    <div className="space-y-8">
+                                        {/* 第 1 条数据 */}
+                                        <div className="break-words">
+                                            <h4 className="font-bold text-gray-800 mb-2 text-lg">1. 古籍数字资源：《李太白集注》（卷三十五：李太白年谱）</h4>
+                                            <p className="text-sm text-gray-600 font-mono leading-relaxed select-all">
+                                                Wang, Q. (Qing Dynasty). Li Taibai Ji Zhu( 35: Li Taibai Nian Pu) [Annotated collection of Li Bai's works (Vol. 35: Chronological biography of Li Bai)]. Chinese Text Project.<br/>
+                                                <a href="https://ctext.org/wiki.pl?if=en&chapter=886336&remap=gb" target="_blank" className="text-blue-600 hover:underline">
+                                                    https://ctext.org/wiki.pl?if=en&chapter=886336&remap=gb
+                                                </a>
+                                            </p>
+                                        </div>
+
+                                        {/* 第 2 条数据 */}
+                                        <div className="break-words">
+                                            <h4 className="font-bold text-gray-800 mb-2 text-lg">2. 数字可视化资源：唐宋文学编年地图（李白专题）</h4>
+                                            <p className="text-sm text-gray-600 font-mono leading-relaxed select-all">
+                                                Suzhou Tupu Information Technology Co., Ltd. (2025). Táng Sòng Wénxué Biānnián Dìtú - Lǐ Bái [Chronological literary map of Tang and Song dynasties - Li Bai] (Interactive digital map) [Data support: Wang, Z. P.]. CNKGraph.<br/>
+                                                <a href="https://cnkgraph.com/Map/PoetLife?author=%e6%9d%8e%e7%99%bd" target="_blank" className="text-blue-600 hover:underline">
+                                                    https://cnkgraph.com/Map/PoetLife?author=%e6%9d%8e%e7%99%bd
+                                                </a>
+                                            </p>
+                                        </div>
+
+                                        {/* 第 3 条数据 */}
+                                        <div className="break-words">
+                                            <h4 className="font-bold text-gray-800 mb-2 text-lg">3. 学术文献资源</h4>
+                                            <p className="text-sm text-gray-600 font-mono leading-relaxed select-all">
+                                                Pugh, E. (2023, July 4). Digital art history as disciplinary practice. In M. K. Gold & L. F. Klein (Eds.), Debates in the digital humanities 2023 (pp. 217–237, Chapter 14). University of Minnesota Press.<br/>
+                                                <a href="https://dhdebates.gc.cuny.edu/read/debates-in-the-digital-humanities-2023/section/7525de5d-a6fe-4fad-ab68-00e064ea2dca" target="_blank" className="text-blue-600 hover:underline">
+                                                    https://dhdebates.gc.cuny.edu/read/debates-in-the-digital-humanities-2023/section/7525de5d-a6fe-4fad-ab68-00e064ea2dca
+                                                </a>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section className="animate-fade-up" style={{ animationDelay: '0.2s' }}>
+                                <div className="text-center mb-10">
+                                    <h3 className="text-3xl font-bold mb-2">{T['about.data'][lang]}</h3>
+                                    <div className="w-16 h-1 bg-emerald-600 mx-auto rounded-full"></div>
+                                </div>
+                                <div className="flex justify-center">
+                                    <a href="https://github.com/1849083010n-cell/libaifinal.github.io" target="_blank" rel="noopener noreferrer" className="group relative inline-flex items-center justify-center px-8 py-4 text-lg font-bold text-white transition-all duration-200 bg-gray-900 font-pj rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 hover:bg-gray-800 hover:scale-105 shadow-xl">
+                                        <svg className="w-6 h-6 mr-3" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                                        </svg>
+                                        {T['about.download_btn'][lang]}
+                                    </a>
+                                </div>
+                                <div className="text-center mt-4 text-gray-500 text-sm">
+                                    v1.0.0 • JSON Format • CC BY-NC-SA 4.0
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const Portrait = () => {
+            return (
+                <div className="relative w-full aspect-square max-w-[400px] mx-auto">
+                    <div className="absolute inset-0 bg-gray-100 rounded-full transform translate-x-4 translate-y-4 -z-10"></div>
+                    <div className="w-full h-full rounded-full overflow-hidden shadow-2xl border-4 border-white relative bg-gray-200 flex items-center justify-center group">
+                        <img src="https://picx.zhimg.com/80/v2-7228406e00cce3ede863a49268a98993_720w.webp?source=2c26e567" className="w-full h-full object-cover hover:scale-110 transition-transform duration-1000 ease-in-out" alt="Li Bai Portrait" />
+                        <div className="absolute inset-0 bg-blue-900/10 group-hover:bg-transparent transition-colors duration-500"></div>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [view, setView] = useState('home');
+            const [emotionSubView, setEmotionSubView] = useState('map');
+            const [searchRes, setSearchRes] = useState({ type: '', data: '' });
+            const [loading, setLoading] = useState(false);
+            const [emoMenuOpen, setEmoMenuOpen] = useState(false);
+            const menuTimeoutRef = useRef(null);
+
+            // Language State
+            const [lang, setLang] = useState('zh');
+
+            const handleMenuEnter = () => { if (menuTimeoutRef.current) clearTimeout(menuTimeoutRef.current); setEmoMenuOpen(true); };
+            const handleMenuLeave = () => { menuTimeoutRef.current = setTimeout(() => setEmoMenuOpen(false), 200); };
+
+            const toggleLang = () => {
+                setLang(prev => prev === 'zh' ? 'en' : 'zh');
+            };
+
+            const goSearch = async (q, type) => {
+                setLoading(true);
+                const res = await callDeepSeekAPI(type, { query: q }, lang);
+                setSearchRes({ type, data: res });
+                setLoading(false);
+                setView('result');
+            };
+
+            const handleEmotionClick = (type) => {
+                setEmotionSubView(type);
+                setView('emotion');
+                setEmoMenuOpen(false);
+            };
+
+            if (view === 'emotion') return <EmotionMapPage viewType={emotionSubView} onBack={() => setView('home')} lang={lang} />;
+            if (view === 'drink') return <DrinkPage onBack={() => setView('home')} lang={lang} />;
+            if (view === 'life') return <LifePage onBack={() => setView('home')} lang={lang} />;
+            if (view === 'network') return <NetworkPage onBack={() => setView('home')} lang={lang} />;
+            if (view === 'footprint') return <FootprintPage onBack={() => setView('home')} lang={lang} />;
+            if (view === 'result') return <ResultPage type={searchRes.type} data={searchRes.data} onBack={() => setView('home')} lang={lang} />;
+            if (view === 'about') return <AboutPage onBack={() => setView('home')} lang={lang} />;
+
+            return (
+                <div className="min-h-screen bg-gray-50 text-gray-900 font-sans flex flex-col relative overflow-hidden">
+                    <header className="px-8 py-8 md:px-16 md:py-10 flex flex-col md:flex-row justify-between items-center max-w-7xl mx-auto w-full z-20">
+                        <div className="flex items-center gap-4 mb-4 md:mb-0">
+                            <div className="text-2xl font-bold tracking-widest cursor-pointer text-gray-900" onClick={() => setView('home')}>
+                                {T['app.title'][lang]}
+                            </div>
+
+                            {/* Language Switcher */}
+                            <button
+                                onClick={toggleLang}
+                                className="text-xs font-bold border border-gray-300 rounded px-2 py-1 hover:bg-gray-200 transition-colors uppercase"
+                            >
+                                {T['nav.lang'][lang]}
+                            </button>
+                        </div>
+
+                        <nav className="flex flex-wrap justify-center gap-4">
+                            <button onClick={() => setView('life')} className="group px-5 py-2.5 rounded-full bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-400 transition-all duration-300 flex items-center gap-2">
+                                <span className="text-lg leading-none group-hover:scale-110 transition-transform flex items-center">📜</span>
+                                <span className="text-sm font-medium text-gray-600 group-hover:text-blue-600">{T['nav.life'][lang]}</span>
+                            </button>
+
+                            <div className="relative group" onMouseEnter={handleMenuEnter} onMouseLeave={handleMenuLeave}>
+                                <button className="group px-5 py-2.5 rounded-full bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-red-400 transition-all duration-300 flex items-center gap-2">
+                                    <span className="text-lg leading-none group-hover:scale-110 transition-transform flex items-center">📊</span>
+                                    <span className="text-sm font-medium text-gray-600 group-hover:text-red-600">{T['nav.emotion'][lang]}</span>
+                                </button>
+                                {emoMenuOpen && (
+                                    <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50 overflow-hidden animate-fade-up">
+                                        <button onClick={() => handleEmotionClick('map')} className="w-full text-left px-4 py-3 text-sm hover:bg-red-50 hover:text-red-600 font-medium">
+                                            {lang === 'zh' ? '地理热力图' : 'Geo Heatmap'}
+                                        </button>
+                                        <button onClick={() => handleEmotionClick('stats')} className="w-full text-left px-4 py-3 text-sm hover:bg-red-50 hover:text-red-600 font-medium">
+                                            {lang === 'zh' ? '意象与AI赏析' : 'Imagery & AI'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+{/* === 插入这一段：网络关系按钮 === */}
+                            <button onClick={() => setView('network')} className="group px-5 py-2.5 rounded-full bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-indigo-400 transition-all duration-300 flex items-center gap-2">
+                                <span className="text-lg leading-none group-hover:scale-110 transition-transform flex items-center text-gray-500 group-hover:text-indigo-600">🔗</span>
+                                <span className="text-sm font-medium text-gray-600 group-hover:text-indigo-600">{T['nav.network'][lang]}</span>
+                            </button>
+                            {/* ================================== */}
+
+                            <button onClick={() => setView('footprint')} className="group px-5 py-2.5 rounded-full bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-emerald-400 transition-all duration-300 flex items-center gap-2">
+                                <span className="text-lg leading-none group-hover:scale-110 transition-transform flex items-center">🌏</span>
+                                <span className="text-sm font-medium text-gray-600 group-hover:text-emerald-600">{T['nav.footprint'][lang]}</span>
+                            </button>
+                            <button onClick={() => setView('drink')} className="group px-5 py-2.5 rounded-full bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-purple-400 transition-all duration-300 flex items-center gap-2">
+                                <span className="text-lg leading-none group-hover:scale-110 transition-transform flex items-center">🥂</span>
+                                <span className="text-sm font-medium text-gray-600 group-hover:text-purple-600">{T['nav.drink'][lang]}</span>
+                            </button>
+                            <button onClick={() => setView('about')} className="group px-5 py-2.5 rounded-full bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-gray-500 transition-all duration-300 flex items-center gap-2">
+                                <span className="text-lg leading-none group-hover:scale-110 transition-transform flex items-center">👥</span>
+                                <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900">{T['nav.about'][lang]}</span>
+                            </button>
+                        </nav>
+                    </header>
+                    <main className="flex-1 flex flex-col items-center justify-center px-8 pb-20">
+                        <div className="flex flex-col-reverse lg:flex-row items-center gap-12 lg:gap-20 max-w-6xl w-full">
+                            <div className="w-full lg:w-3/5 space-y-8 z-10">
+                                <Typewriter lang={lang} />
+                                <div className="max-w-lg">
+                                    <p className="text-xl md:text-2xl text-gray-600 leading-relaxed font-serif whitespace-pre-wrap">
+                                        {T['home.desc'][lang]}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="w-full lg:w-2/5 flex justify-center lg:justify-end">
+                                <Portrait />
+                            </div>
+                        </div>
+
+                        <div className="mt-16 w-full flex flex-col items-center">
+                            <SearchSection onSearch={goSearch} loading={loading} lang={lang} />
+                        </div>
+                    </main>
+                    <footer className="text-center py-6 text-gray-400 text-sm font-serif">
+                        {T['footer.text'][lang]}
+                    </footer>
+                </div>
+            );
+        };
+
+        const rootElement = document.getElementById('root');
+        const root = createRoot(rootElement);
+        root.render(
+            <React.StrictMode>
+                <App />
+            </React.StrictMode>
+        );
+    </script>
+</body>
+</html>
